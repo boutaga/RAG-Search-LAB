@@ -19,7 +19,31 @@ CREATE TABLE kb_chunks (
   metadata      JSONB,                  -- e.g., page number, section
   inserted_at   TIMESTAMPTZ DEFAULT now()
 );
-CREATE INDEX ON kb_chunks USING ivfflat (embedding) WITH (lists = 100);
+-- Enable pgvector for vector data types
+CREATE EXTENSION IF NOT EXISTS vector;  
+-- Enable vectorscale (includes the DiskANN index type)
+CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;
+
+
+-- 1.2 Add sparse_embedding alongside existing dense embeddings
+ALTER TABLE kb_chunks
+  ADD COLUMN sparse_embedding vector(32768) SPARSE;  -- vocabulary‐sized sparse embeddings :contentReference[oaicite:5]{index=5}
+
+-- Create a GIN index on the metadata JSONB column for fast filtering
+CREATE INDEX kb_chunks_metadata_gin_idx
+  ON kb_chunks
+  USING GIN (metadata);
+
+-- Create a DiskANN index on the dense embedding column for ANN search
+CREATE INDEX kb_chunks_embedding_diskann_idx
+  ON kb_chunks
+  USING diskann (embedding vector_l2_ops);
+
+-- Create a combined DiskANN index that also filters by labels
+CREATE INDEX documents_diskann_labels_idx
+  ON documents
+  USING diskann (embedding vector_cosine_ops, labels);
+
 
 
 -- 2.1 Conversation sessions
@@ -99,3 +123,5 @@ CREATE TABLE agent_metrics (
   metric_value  DOUBLE PRECISION NOT NULL,
   measured_at   TIMESTAMPTZ DEFAULT now()
 );
+
+
