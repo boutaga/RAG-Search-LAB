@@ -18,6 +18,7 @@ Intent of the solution and added value expected :
     - no hanging tickets with automated routing
     - KPI generation for mgmt
 
+![image](https://github.com/user-attachments/assets/5b8d301b-3e73-4d8e-a7b5-a3c5a7453ccd)
 
 
 # Documents database
