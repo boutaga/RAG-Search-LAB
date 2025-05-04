@@ -88,6 +88,14 @@ as much as the way it is processed in the embedding process is a critical part.
 ## Indexes on pgvector-pgvectorscale 
 
 
+# Limitations 
+
+
+## Data flow 
+
+In this example the databases are static. Realistically, the databases of Service Desk and documents would be live with continuously incoming data.
+The document database wouldn't be much of challenge since the data won't change so much, so you could run a batch process periodically without much issues on precision and relevance. 
+Regarding the Service Desk database, you would 
 
 
 
