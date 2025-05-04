@@ -2,6 +2,10 @@
 
 # RAG-Search-LAB
 This repository has educational purpose on advanced RAG Search techniques based on PostgreSQL-pgvector-pgvectorscale-pgai...
+
+
+
+## The AI agent Service Desk example
 In order to expose a real use cases and prove the point and added value of advanced RAG Search techniques, I created the following data sources
 and the associated scenario of a Service Desk team that would take leverage of AI/LLM and RAG Search techniques.   
 An AI Agent for the Service Desk team is holding the business logic and has deferent tools like email, document management,... This AI Agent also take leverage of
