@@ -125,3 +125,96 @@ CREATE TABLE agent_metrics (
 );
 
 
+-- Connection to external ticketing system
+CREATE TABLE external_tickets (
+  ticket_id        BIGSERIAL PRIMARY KEY,
+  external_id      VARCHAR(100) NOT NULL,
+  system_source    TEXT NOT NULL,          -- name of ticketing system
+  ticket_summary   TEXT NOT NULL,
+  current_status   TEXT NOT NULL,
+  resolution       TEXT,                   -- resolution from ticket system
+  created_at       TIMESTAMPTZ NOT NULL,
+  resolved_at      TIMESTAMPTZ,
+  UNIQUE(external_id, system_source)
+);
+
+-- Link conversations to tickets
+CREATE TABLE conversation_ticket_links (
+  link_id         BIGSERIAL PRIMARY KEY,
+  conversation_id UUID NOT NULL REFERENCES conversations(conversation_id),
+  ticket_id       BIGINT NOT NULL REFERENCES external_tickets(ticket_id),
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+
+-- Track identified problems
+CREATE TABLE problems (
+  problem_id      BIGSERIAL PRIMARY KEY,
+  title           TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  category        TEXT,
+  severity        SMALLINT CHECK (severity BETWEEN 1 AND 5),
+  status          TEXT NOT NULL,           -- 'identified', 'in_progress', 'resolved'
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Store validated solutions
+CREATE TABLE solutions (
+  solution_id     BIGSERIAL PRIMARY KEY,
+  problem_id      BIGINT REFERENCES problems(problem_id),
+  title           TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  implementation  TEXT,                   -- implementation steps
+  effectiveness   SMALLINT CHECK (effectiveness BETWEEN 1 AND 5),
+  is_validated    BOOLEAN DEFAULT false,
+  validator_id    BIGINT,                 -- Who validated this solution
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Link tickets to problems
+CREATE TABLE ticket_problem_links (
+  link_id         BIGSERIAL PRIMARY KEY,
+  ticket_id       BIGINT NOT NULL REFERENCES external_tickets(ticket_id),
+  problem_id      BIGINT NOT NULL REFERENCES problems(problem_id),
+  link_type       TEXT DEFAULT 'related', -- 'related', 'root_cause', 'duplicate'
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+
+-- Link documents/KB chunks to problems and solutions
+CREATE TABLE knowledge_links (
+  link_id         BIGSERIAL PRIMARY KEY,
+  chunk_id        BIGINT REFERENCES kb_chunks(chunk_id),
+  document_id     BIGINT REFERENCES documents(document_id),
+  problem_id      BIGINT REFERENCES problems(problem_id),
+  solution_id     BIGINT REFERENCES solutions(solution_id),
+  relevance_score FLOAT CHECK (relevance_score BETWEEN 0 AND 1),
+  link_type       TEXT NOT NULL,          -- 'sop', 'best_practice', 'reference'
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Track which solutions were applied to which conversations
+CREATE TABLE applied_solutions (
+  applied_id      BIGSERIAL PRIMARY KEY,
+  conversation_id UUID NOT NULL REFERENCES conversations(conversation_id),
+  solution_id     BIGINT NOT NULL REFERENCES solutions(solution_id),
+  success_rating  SMALLINT CHECK (success_rating BETWEEN 1 AND 5),
+  notes           TEXT,
+  applied_at      TIMESTAMPTZ DEFAULT now()
+);
+
+
+-- Track system alerts that may relate to known problems
+CREATE TABLE alerts (
+  alert_id        BIGSERIAL PRIMARY KEY,
+  source_system   TEXT NOT NULL,
+  alert_type      TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  severity        SMALLINT NOT NULL CHECK (severity BETWEEN 1 AND 5),
+  status          TEXT NOT NULL,          -- 'active', 'acknowledged', 'resolved'
+  problem_id      BIGINT REFERENCES problems(problem_id),
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  resolved_at     TIMESTAMPTZ
+);
