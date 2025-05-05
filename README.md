@@ -95,7 +95,13 @@ as much as the way it is processed in the embedding process is a critical part.
 
 In this example the databases are static. Realistically, the databases of Service Desk and documents would be live with continuously incoming data.
 The document database wouldn't be much of challenge since the data won't change so much, so you could run a batch process periodically without much issues on precision and relevance. 
-Regarding the Service Desk database, you would 
+Regarding the Service Desk database, you would need an event that would trigger the re-embedding of the tickets, for example. If a ticket changed drastically, it would make sense 
+to process the embedding again and this might happen a lot especially in the early stages of the ticket lifecycle since new informations will be flowing with the investigation. 
+I guess it makes sense then to only process new tickets after some time or after a certain level of status is reached. Some fields like alert content could be process right away though since they 
+might not change at all after the ticket creation. 
+In all case we will need to trace how much a field that is part of an embedding is changed in order to be able to refresh the embedding automatically. 
+
+
 
 
 
