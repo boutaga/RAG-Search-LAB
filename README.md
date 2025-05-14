@@ -4,6 +4,41 @@ This repository has educational purpose on advanced RAG Search techniques based 
 
 ---
 
+## Architecture Overview
+
+```
++-------------------+      +-------------------+      +-------------------+
+| Documents DB      |      | Service Desk DB   |      | RAG/AI Agent DB   |
++-------------------+      +-------------------+      +-------------------+
+         |                          |                          |
+         +--------------------------+--------------------------+
+                                    |
+                             +----------------+
+                             |   FastAPI      |
+                             |  (RAG_Scripts) |
+                             +----------------+
+                                    |
+                             +----------------+
+                             |   MCP Server   |
+                             | (custom tools) |
+                             +----------------+
+                                    |
+                             +----------------+
+                             |   Frontend UI  |
+                             +----------------+
+```
+
+- **Documents DB:** SOPs, document metadata, file links
+- **Service Desk DB:** Tickets, users, organizations, configuration items
+- **RAG/AI Agent DB:** Embeddings, chat logs, retrieval history, feedback, agent context, links to tickets/problems
+- **FastAPI Backend:** RAG search, ticket management, document retrieval, LLM orchestration, business logic
+- **MCP Server:** Modular tools for analytics, LLM chains, feedback, notifications, UI integration
+- **Frontend UI:** (Planned) React/Vue/Angular app for chat, ticket management, analytics, feedback
+
+---
+
+---
+
 ## Getting Started
 
 This project consists of several main components:
