@@ -33,12 +33,20 @@ SPARSE_WEIGHT = 0.3  # Default weight for sparse vectors
 
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/agentdb")
+DOCUMENT_DB_URL = os.getenv("DOCUMENT_DB_URL", "postgresql+asyncpg://user:pass@localhost/documentdb")
+SD_DB_URL = os.getenv("SD_DB_URL", "postgresql+asyncpg://user:pass@localhost/sddb")
 VECTOR_DIM = 1536
 MCP_SERVERS = os.getenv("MCP_SERVERS", "http://localhost:8001")  # MCP server URL
 
 # Database setup
-engine = create_async_engine(DATABASE_URL, echo=True)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+agent_engine = create_async_engine(DATABASE_URL, echo=True)
+AsyncAgentSessionLocal = sessionmaker(agent_engine, class_=AsyncSession, expire_on_commit=False)
+
+document_engine = create_async_engine(DOCUMENT_DB_URL, echo=True)
+AsyncDocumentSessionLocal = sessionmaker(document_engine, class_=AsyncSession, expire_on_commit=False)
+
+sd_engine = create_async_engine(SD_DB_URL, echo=True)
+AsyncSDSessionLocal = sessionmaker(sd_engine, class_=AsyncSession, expire_on_commit=False)
 
 # FastAPI app
 app = FastAPI()
@@ -54,8 +62,16 @@ app.add_middleware(
 )
 
 # Dependencies
-async def get_db():
-    async with AsyncSessionLocal() as session:
+async def get_agent_db():
+    async with AsyncAgentSessionLocal() as session:
+        yield session
+
+async def get_document_db():
+    async with AsyncDocumentSessionLocal() as session:
+        yield session
+
+async def get_sd_db():
+    async with AsyncSDSessionLocal() as session:
         yield session
 
 # MCP client initialization
@@ -77,6 +93,46 @@ def adjust_weights(query: str) -> Tuple[float, float]:
     
     # Default weights for balanced queries
     return DENSE_WEIGHT, SPARSE_WEIGHT
+
+# Modify the create_temporary_solution endpoint to send notification via MCP client
+@app.post("/api/solutions/temporary")
+async def create_temporary_solution(
+    req: TemporarySolutionCreateRequest,
+    agent_db: AsyncSession = Depends(get_agent_db)
+):
+    insert_sql = text("""
+        INSERT INTO solutions (problem_id, title, description, is_validated, created_at)
+        VALUES (:problem_id, :title, :description, FALSE, now())
+        RETURNING solution_id
+    """)
+    result = await agent_db.execute(insert_sql.bindparams(
+        problem_id=req.problem_id,
+        title=req.title,
+        description=req.description
+    ))
+    solution_id = result.scalar_one()
+
+    await agent_db.commit()
+
+    # Send email notification to consultant(s) via MCP client
+    consultant_email = os.getenv("CONSULTANT_EMAIL", "consultant@example.com")
+    subject = f"New Solution Pending Approval: {req.title}"
+    body = f"A new solution has been proposed for problem ID {req.problem_id}.\n\nTitle: {req.title}\nDescription: {req.description}\n\nPlease review and validate the solution."
+
+    try:
+        await mcp_client.call_tool(
+            "email_server",  # Assuming the MCP server name is 'email_server'
+            "send_email",    # Assuming the tool name is 'send_email'
+            {
+                "to": consultant_email,
+                "subject": subject,
+                "body": body
+            }
+        )
+    except Exception as e:
+        print(f"Failed to send email via MCP client: {e}")
+
+    return {"solution_id": solution_id, "status": "pending_validation"}
 
 @app.on_event("startup")
 async def startup():
@@ -119,6 +175,19 @@ class ProblemLink(BaseModel):
     problem_id: int
     link_type: str = "related"
 
+class TemporarySolutionCreateRequest(BaseModel):
+    problem_id: int
+    title: str
+    description: str
+    proposed_by_user_id: Optional[int] = None  # ID of the user proposing the solution
+
+class SolutionValidationRequest(BaseModel):
+    solution_id: int
+    title: Optional[str] = None
+    description: Optional[str] = None
+    is_validated: Optional[bool] = None
+    validator_user_id: Optional[int] = None  # ID of the consultant validating the solution
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -133,14 +202,149 @@ async def login(username: str = Form(...), password: str = Form(...)):
     return response
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
-    # Fetch ticket data from Postgres
-    result = await db.execute("SELECT ticket_id, title, status_id FROM ticket;")
+async def dashboard(request: Request, db: AsyncSession = Depends(get_agent_db)):
+    # Fetch ticket data from AI agent database external_tickets table
+    result = await db.execute("SELECT ticket_id, external_id, ticket_summary, current_status FROM external_tickets;")
     tickets = result.fetchall()
     return templates.TemplateResponse("dashboard.html", {"request": request, "tickets": tickets})
 
+# New endpoint: List open tickets from SD database
+@app.get("/api/sd/open-tickets")
+async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):
+    ticket_sql = text("""
+        SELECT t.ticket_id, t.title, ts.name AS status, tp.name AS priority, 
+               tt.name AS type, t.description 
+        FROM ticket t
+        JOIN ticket_status ts ON t.status_id = ts.status_id
+        JOIN ticket_priority tp ON t.priority_id = tp.priority_id
+        JOIN ticket_type tt ON t.type_id = tt.type_id
+        WHERE t.closure_date IS NULL
+        ORDER BY 
+            CASE 
+                WHEN tp.name = 'Critical' THEN 1
+                WHEN tp.name = 'High' THEN 2
+                WHEN tp.name = 'Medium' THEN 3
+                ELSE 4
+            END
+        LIMIT 20
+    """)
+    ticket_rows = await sd_db.execute(ticket_sql)
+    tickets = ticket_rows.fetchall()
+    return {"open_tickets": [dict(t) for t in tickets]}
+
+# New endpoint: Get similar problems and solutions for a given ticket
+@app.get("/api/tickets/{ticket_id}/related-solutions")
+async def get_related_solutions(
+    ticket_id: int,
+    agent_db: AsyncSession = Depends(get_agent_db)
+):
+    # Find the external_ticket_id in AI agent database
+    ext_ticket_sql = text("""
+        SELECT ticket_id FROM external_tickets WHERE external_id = :ext_id AND system_source = 'internal_sd'
+    """)
+    ext_ticket_result = await agent_db.execute(ext_ticket_sql.bindparams(ext_id=str(ticket_id)))
+    ext_ticket_id = ext_ticket_result.scalar_one_or_none()
+    if not ext_ticket_id:
+        raise HTTPException(status_code=404, detail="Ticket not found in AI agent database")
+
+    # Find problems linked to this ticket
+    problems_sql = text("""
+        SELECT p.problem_id, p.title, p.description, p.status
+        FROM problems p
+        JOIN ticket_problem_links tpl ON p.problem_id = tpl.problem_id
+        WHERE tpl.ticket_id = :ticket_id
+    """)
+    problems_result = await agent_db.execute(problems_sql.bindparams(ticket_id=ext_ticket_id))
+    problems = problems_result.fetchall()
+
+    # For each problem, find validated solutions
+    solutions = []
+    for problem in problems:
+        solutions_sql = text("""
+            SELECT solution_id, title, description, effectiveness
+            FROM solutions
+            WHERE problem_id = :problem_id AND is_validated = TRUE
+            ORDER BY effectiveness DESC
+            LIMIT 5
+        """)
+        solutions_result = await agent_db.execute(solutions_sql.bindparams(problem_id=problem.problem_id))
+        sol_list = solutions_result.fetchall()
+        solutions.append({
+            "problem": dict(problem),
+            "solutions": [dict(s) for s in sol_list]
+        })
+
+    return {"related_solutions": solutions}
+
+# New endpoint: Create a temporary solution linked to a problem
+@app.post("/api/solutions/temporary")
+async def create_temporary_solution(
+    req: TemporarySolutionCreateRequest,
+    agent_db: AsyncSession = Depends(get_agent_db)
+):
+    insert_sql = text("""
+        INSERT INTO solutions (problem_id, title, description, is_validated, created_at)
+        VALUES (:problem_id, :title, :description, FALSE, now())
+        RETURNING solution_id
+    """)
+    result = await agent_db.execute(insert_sql.bindparams(
+        problem_id=req.problem_id,
+        title=req.title,
+        description=req.description
+    ))
+    solution_id = result.scalar_one()
+
+    # Optionally, you could log who proposed the solution if you have a user system
+
+    await agent_db.commit()
+    return {"solution_id": solution_id, "status": "pending_validation"}
+
+# New endpoint: Validate and update a solution
+@app.put("/api/solutions/validate")
+async def validate_solution(
+    req: SolutionValidationRequest,
+    agent_db: AsyncSession = Depends(get_agent_db)
+):
+    # Build update fields dynamically
+    update_fields = []
+    params = {"solution_id": req.solution_id}
+    if req.title is not None:
+        update_fields.append("title = :title")
+        params["title"] = req.title
+    if req.description is not None:
+        update_fields.append("description = :description")
+        params["description"] = req.description
+    if req.is_validated is not None:
+        update_fields.append("is_validated = :is_validated")
+        params["is_validated"] = req.is_validated
+    if req.validator_user_id is not None:
+        update_fields.append("validator_id = :validator_user_id")
+        params["validator_user_id"] = req.validator_user_id
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    update_sql = text(f"""
+        UPDATE solutions
+        SET {', '.join(update_fields)}, updated_at = now()
+        WHERE solution_id = :solution_id
+        RETURNING solution_id
+    """)
+    result = await agent_db.execute(update_sql.bindparams(**params))
+    updated_id = result.scalar_one_or_none()
+    if not updated_id:
+        raise HTTPException(status_code=404, detail="Solution not found")
+
+    await agent_db.commit()
+    return {"solution_id": updated_id, "status": "updated"}
+
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_endpoint(
+    req: ChatRequest, 
+    agent_db: AsyncSession = Depends(get_agent_db),
+    document_db: AsyncSession = Depends(get_document_db),
+    sd_db: AsyncSession = Depends(get_sd_db)
+):
     query = req.message
     conversation_id = uuid.uuid4()  # In production, store and reuse per session
 
@@ -151,11 +355,19 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     dense_q = await run_in_threadpool(lambda: get_dense(query))
     sparse_q = await run_in_threadpool(lambda: get_sparse(query))
 
-    # 3. Dense retrieval (LangChain)
+    # 3. Dense retrieval from AI agent database (kb_chunks)
+    vectorstore = PGVector.from_existing_table(
+        connection_string=DATABASE_URL,
+        embedding_function=embeddings,
+        table_name="kb_chunks",
+        column_name="embedding",
+        dimension=VECTOR_DIM
+    )
+    dense_retriever = vectorstore.as_retriever(search_kwargs={"k": TOP_K})
     dense_docs = await run_in_threadpool(lambda: dense_retriever.get_relevant_documents(query))
 
-    # 4. Sparse retrieval via SQL
-    sql = text("""
+    # 4. Sparse retrieval via SQL on AI agent database
+    sparse_sql = text("""
       SELECT kc.chunk_id, kc.chunk_text, d.title, 
              kc.sparse_embedding <=> :q AS dist,
              d.document_id
@@ -164,8 +376,8 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
       ORDER BY kc.sparse_embedding <=> :q
       LIMIT :k
     """)
-    rows = await db.execute(sql.bindparams(q=sparse_q, k=TOP_K))
-    sparse_results = rows.fetchall()
+    sparse_rows = await agent_db.execute(sparse_sql.bindparams(q=sparse_q, k=TOP_K))
+    sparse_results = sparse_rows.fetchall()
     sparse_docs = [r.chunk_text for r in sparse_results]
 
     # 5. Merge & rerank by weighted distance
@@ -202,7 +414,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     # 7. Check if query relates to tickets
     ticket_info = ""
     if any(kw in query.lower() for kw in ["ticket", "issue", "problem", "incident"]):
-        # Get relevant ticket information
+        # Get relevant ticket information from SD database
         ticket_sql = text("""
             SELECT t.ticket_id, t.title, ts.name AS status, tp.name AS priority, 
                    tt.name AS type, t.description 
@@ -220,7 +432,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
                 END
             LIMIT 5
         """)
-        ticket_rows = await db.execute(ticket_sql)
+        ticket_rows = await sd_db.execute(ticket_sql)
         tickets = ticket_rows.fetchall()
         
         if tickets:
@@ -230,7 +442,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
             )
             context += "\n\n" + ticket_info
     
-    # 8. Check for known problems and solutions
+    # 8. Check for known problems and solutions from AI agent database
     problems_info = ""
     solutions_sql = text("""
         SELECT p.problem_id, p.title AS problem_title, p.description AS problem_desc,
@@ -242,7 +454,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
         ORDER BY s.effectiveness DESC
         LIMIT 3
     """)
-    solutions_rows = await db.execute(solutions_sql)
+    solutions_rows = await agent_db.execute(solutions_sql)
     solutions = solutions_rows.fetchall()
     
     if solutions:
@@ -255,14 +467,14 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     # 9. Ask LLM with enhanced context
     answer = await run_in_threadpool(lambda: qa_chain.run({"query": query, "context": context}))
 
-    # 10. Log the chat interaction
+    # 10. Log the chat interaction in AI agent database
     log_sql = text("""
         INSERT INTO chat_logs 
             (conversation_id, role, content, model_name, prompt_tokens, response_tokens, total_tokens)
         VALUES (:conv_id, 'user', :msg, 'openai', :p_tokens, 0, :p_tokens)
         RETURNING log_id
     """)
-    user_log = await db.execute(
+    user_log = await agent_db.execute(
         log_sql.bindparams(
             conv_id=conversation_id, 
             msg=query, 
@@ -272,7 +484,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     user_log_id = user_log.scalar_one()
     
     # Log agent response
-    agent_log = await db.execute(
+    agent_log = await agent_db.execute(
         text("""
             INSERT INTO chat_logs 
                 (conversation_id, role, content, model_name, prompt_tokens, response_tokens, total_tokens)
@@ -289,7 +501,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     # Log retrieved documents
     for i, doc_id in enumerate(doc_ids):
         if doc_id:
-            await db.execute(
+            await agent_db.execute(
                 text("""
                     INSERT INTO retrieval_history
                         (log_id, chunk_id, similarity_score, retrieved_at)
@@ -301,7 +513,7 @@ async def chat_endpoint(req: ChatRequest, db: AsyncSession = Depends(get_db)):
                 )
             )
     
-    await db.commit()
+    await agent_db.commit()
     
     # Return the agent's response with metadata
     return {
