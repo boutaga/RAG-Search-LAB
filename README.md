@@ -4,7 +4,7 @@ This repository has educational purpose on advanced RAG Search techniques based 
 
 ## MCP Server for SD Agent
 
-A new MCP server project `custom-agent-tools` has been added to this repository to support the Service Desk AI Agent with modular tools and resources.
+A new MCP server project `custom-agent-tools` (TypeScript, v0.1) and `custom-agent-tools-py` (Python/Langchain, v0.2) have been added to this repository to support the Service Desk AI Agent with modular tools and resources.
 
 ### Features added in MCP server:
 
@@ -16,22 +16,23 @@ A new MCP server project `custom-agent-tools` has been added to this repository 
 
 This MCP server enables flexible and extensible integration of these functionalities with the AI Agent backend.
 
-The MCP server project is located in the `custom-agent-tools` directory and can be built and run independently.
+The MCP server projects are located in the `custom-agent-tools` (TypeScript) and `custom-agent-tools-py` (Python) directories and can be built and run independently.
 
-### How to build and run the MCP server:
+### How to build and run the Python MCP server:
 
 ```bash
-cd custom-agent-tools
-npm install
-npm run build
-node build/index.js
+cd custom-agent-tools-py
+python -m venv venv
+venv/Scripts/activate  # On Windows
+pip install -r requirements.txt  # or see README for manual install
+uvicorn main:app --reload
 ```
 
 ### Integration
 
 Once running, the MCP server exposes tools and resources accessible via the Model Context Protocol, allowing the AI Agent to offload these responsibilities.
 
-Please refer to the `custom-agent-tools/README.md` for more details on the MCP server implementation and usage.
+Please refer to the `custom-agent-tools/README.md` and `custom-agent-tools-py/README.md` for more details on the MCP server implementation and usage.
 
 
 ## The AI agent Service Desk example
@@ -159,6 +160,24 @@ In this example, the databases are static. Realistically, the Service Desk and D
 The document database would require periodic batch embedding refresh, while the Service Desk database would need event-driven embedding refresh based on ticket lifecycle changes.
 
 # Release Notes
+
+## v0.2 (Python/Langchain MCP Agent Migration)
+
+### Features
+- Python-based MCP server (`custom-agent-tools-py`) using FastAPI and Langchain
+- Modular tools for chat logging, ticket management, search, feedback, and problem linking
+- In-memory storage for rapid prototyping (to be replaced with database integration)
+- Ready for integration with Langchain for advanced RAG and LLM workflows
+- Documentation and setup instructions
+
+### Upcoming Tasks
+- Integrate Langchain for hybrid RAG search and LLM orchestration
+- Add database-backed storage to MCP tools (currently in-memory)
+- Implement event-driven embedding refresh for live data
+- Expand MCP tools for email, alerting, and advanced analytics
+- UI improvements and integration with frontend
+- More robust error handling and monitoring
+- Usage examples and API documentation
 
 ## v0.1 (Initial Release)
 
