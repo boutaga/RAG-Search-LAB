@@ -17,6 +17,7 @@ A new MCP server project `custom-agent-tools` (TypeScript, v0.1, **deprecated**)
 - (v0.4+) Advanced LLM orchestration, email/alerting/analytics tools, and UI integration endpoints
 - (v0.6+) Real email/alerting integration, analytics, and UI endpoints
 - (v0.7) Multi-step LLM chains for ticket triage, root cause analysis, solution recommendation, conversation summarization, entity extraction, follow-up actions, hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops
+- (v0.8) Expanded analytics and reporting endpoints, UI integration, usage examples, authentication/authorization
 
 **Note:** The TypeScript MCP server (`custom-agent-tools`) is now deprecated. Please use the Python/Langchain version for all new development.
 
@@ -39,6 +40,30 @@ Once running, the MCP server exposes tools and resources accessible via the Mode
 Please refer to the `custom-agent-tools/README.md` and `custom-agent-tools-py/README.md` for more details on the MCP server implementation and usage.
 
 # Release Notes
+
+## v0.8 (Analytics, Reporting, UI Integration)
+
+### Features
+- Expanded analytics and reporting endpoints:
+  - Ticket volume over time, average resolution time, open/closed ratios, SLA compliance
+  - Agent leaderboard, satisfaction scores, escalation rates
+  - Document usage, SOP reference tracking, knowledge gaps
+  - Export analytics as CSV, Excel, or PDF
+  - BI tool integration (Power BI, Tableau) via API (planned)
+- UI integration and usage examples:
+  - React/Vue/Angular frontend integration
+  - UI components for chat, ticket management, analytics dashboards, feedback forms
+  - Real-time updates for alerts and ticket changes (WebSocket/polling)
+  - Example API calls (curl, Python, Postman) and sample workflows
+  - Authentication/authorization (JWT/OAuth2, role-based access)
+- All previous features (LLM chains, hybrid RAG, email/alerting, analytics, PostgreSQL-backed storage)
+
+### Upcoming Tasks
+- Integrate additional alerting/email providers (e.g., Microsoft Teams, PagerDuty)
+- Expand analytics and reporting endpoints
+- Complete UI integration and provide usage examples
+- Add more advanced LLM chains and workflows
+- Further production hardening and monitoring
 
 ## v0.7 (Advanced LLM Chains, RAG Enhancements)
 

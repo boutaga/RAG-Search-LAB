@@ -1,10 +1,10 @@
-# custom-agent-tools-py (v0.7)
+# custom-agent-tools-py (v0.8)
 
 Python/Langchain MCP Server for SD Agent
 
 **This is the actively maintained MCP server for the Service Desk AI Agent. The previous TypeScript version (`custom-agent-tools`) is now deprecated.**
 
-This project is a Python-based MCP server for the Service Desk AI Agent, providing modular tools and resources for chat logging, ticket management, search, feedback, problem linking, advanced LLM orchestration, email, alerting, analytics, and now advanced LLM chains and workflows.
+This project is a Python-based MCP server for the Service Desk AI Agent, providing modular tools and resources for chat logging, ticket management, search, feedback, problem linking, advanced LLM orchestration, email, alerting, analytics, advanced LLM chains, and now expanded analytics, reporting, and UI integration.
 
 ## Features
 
@@ -15,11 +15,13 @@ This project is a Python-based MCP server for the Service Desk AI Agent, providi
 - Problem linking tool and resource (PostgreSQL-backed)
 - Advanced LLM orchestration endpoints (summarization, classification, etc.)
 - Email and alerting tool endpoints (real SMTP and Slack integration)
-- Analytics endpoints (e.g., ticket counts)
+- Analytics endpoints (e.g., ticket counts, volume over time, agent leaderboard, document usage)
+- Export endpoints for analytics (CSV, Excel, PDF)
 - UI integration endpoints (for frontend)
 - Multi-step LLM chains for ticket triage, root cause analysis, solution recommendation
 - Conversation summarization, entity extraction, follow-up actions
 - Hybrid reranking, context window optimization, dynamic prompt engineering, feedback loops
+- Authentication/authorization endpoints (JWT/OAuth2, role-based access)
 - Designed for easy extension with Langchain, FastAPI, and PostgreSQL
 
 ## Setup
@@ -52,7 +54,23 @@ Set the following environment variables for email and Slack integration:
 
 ## Release Notes
 
-### v0.7 (Current)
+### v0.8 (Current)
+
+- Expanded analytics and reporting endpoints:
+  - Ticket volume over time, average resolution time, open/closed ratios, SLA compliance
+  - Agent leaderboard, satisfaction scores, escalation rates
+  - Document usage, SOP reference tracking, knowledge gaps
+  - Export analytics as CSV, Excel, or PDF
+  - BI tool integration (Power BI, Tableau) via API (planned)
+- UI integration and usage examples:
+  - React/Vue/Angular frontend integration
+  - UI components for chat, ticket management, analytics dashboards, feedback forms
+  - Real-time updates for alerts and ticket changes (WebSocket/polling)
+  - Example API calls (curl, Python, Postman) and sample workflows
+  - Authentication/authorization (JWT/OAuth2, role-based access)
+- All previous features (LLM chains, hybrid RAG, email/alerting, analytics, PostgreSQL-backed storage)
+
+### v0.7
 
 - Multi-step LLM chains for ticket triage, root cause analysis, solution recommendation
 - Conversation summarization, entity extraction, follow-up actions
