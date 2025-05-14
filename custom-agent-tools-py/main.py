@@ -1,9 +1,8 @@
 """
-custom-agent-tools-py v0.3
+custom-agent-tools-py v0.4
 
 Python/Langchain MCP Server for SD Agent
-Implements modular tools for chat logging, ticket management, search, feedback, and problem linking.
-Now with Langchain hybrid RAG search and PostgreSQL-backed storage.
+Implements modular tools for chat logging, ticket management, search, feedback, problem linking, and now advanced LLM orchestration, email, alerting, and analytics.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -16,13 +15,14 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.chains import RetrievalQA
+from langchain.chains import RetrievalQA, LLMChain, SequentialChain
 from langchain.llms import OpenAI
+from langchain.prompts import PromptTemplate
 
 app = FastAPI(
     title="SD-MCP Python Agent",
-    version="0.3",
-    description="Python/Langchain MCP server for Service Desk Agent with hybrid RAG and PostgreSQL storage"
+    version="0.4",
+    description="Python/Langchain MCP server for Service Desk Agent with hybrid RAG, LLM orchestration, and advanced tools"
 )
 
 # Database connection (AI agent database)
@@ -30,7 +30,7 @@ PG_CONN_STR = os.getenv("AI_AGENT_DB_URL", "dbname=agentdb user=user password=pa
 def get_pg_conn():
     return psycopg2.connect(PG_CONN_STR, cursor_factory=RealDictCursor)
 
-# Langchain setup for hybrid RAG search
+# Langchain setup for hybrid RAG search and LLM orchestration
 embeddings = OpenAIEmbeddings()
 vectorstore = PGVector.from_existing_table(
     connection_string="postgresql+psycopg2://user:pass@localhost/agentdb",
@@ -45,6 +45,13 @@ qa_chain = RetrievalQA.from_chain_type(
     chain_type="stuff",
     retriever=dense_retriever
 )
+
+# Example advanced LLM orchestration: Summarize and classify a ticket
+summary_prompt = PromptTemplate(
+    input_variables=["ticket"],
+    template="Summarize the following ticket and classify its urgency:\n\n{ticket}\n\nSummary and Urgency:"
+)
+summary_chain = LLMChain(llm=OpenAI(temperature=0.2), prompt=summary_prompt)
 
 # Models
 class ChatLog(BaseModel):
@@ -199,4 +206,38 @@ def search(query: str, limit: int = 5):
             seen.add(doc["chunk_text"])
     return results[:limit]
 
-# TODO: Add LLM orchestration endpoints and advanced Langchain chains as needed
+# Advanced LLM orchestration endpoint: summarize and classify a ticket
+@app.post("/llm/summarize_ticket")
+def summarize_ticket(ticket_id: str):
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT ticket_summary FROM external_tickets WHERE external_id = %s", (ticket_id,))
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    summary = summary_chain.run(ticket=row["ticket_summary"])
+    return {"ticket_id": ticket_id, "summary_and_urgency": summary}
+
+# Email/alerting/analytics tool endpoints (stubs for v0.4)
+@app.post("/notify/email")
+def send_email(to: str, subject: str, body: str):
+    # TODO: Integrate with real email service
+    print(f"Email sent to {to}: {subject}\n{body}")
+    return {"status": "sent", "to": to, "subject": subject}
+
+@app.post("/notify/alert")
+def send_alert(message: str, severity: str = "info"):
+    # TODO: Integrate with real alerting system
+    print(f"Alert ({severity}): {message}")
+    return {"status": "alerted", "severity": severity}
+
+@app.get("/analytics/ticket-counts")
+def ticket_counts():
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT current_status, COUNT(*) FROM external_tickets GROUP BY current_status")
+            rows = cur.fetchall()
+    return {"ticket_counts": rows}
+
+# TODO: Add more analytics endpoints as needed
+# TODO: Add UI integration endpoints (for frontend)

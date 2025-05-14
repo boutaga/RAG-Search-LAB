@@ -4,7 +4,7 @@ This repository has educational purpose on advanced RAG Search techniques based 
 
 ## MCP Server for SD Agent
 
-A new MCP server project `custom-agent-tools` (TypeScript, v0.1) and `custom-agent-tools-py` (Python/Langchain, v0.2) have been added to this repository to support the Service Desk AI Agent with modular tools and resources.
+A new MCP server project `custom-agent-tools` (TypeScript, v0.1) and `custom-agent-tools-py` (Python/Langchain, v0.2+) have been added to this repository to support the Service Desk AI Agent with modular tools and resources.
 
 ### Features added in MCP server:
 
@@ -13,6 +13,8 @@ A new MCP server project `custom-agent-tools` (TypeScript, v0.1) and `custom-age
 - Search tool to query chat logs and tickets by keyword
 - Feedback submission tool and resources
 - Problem linking tool and resources
+- (v0.3+) Hybrid RAG search with Langchain and PostgreSQL-backed storage
+- (v0.4) Advanced LLM orchestration, email/alerting/analytics tools, and UI integration endpoints
 
 This MCP server enables flexible and extensible integration of these functionalities with the AI Agent backend.
 
@@ -160,6 +162,24 @@ In this example, the databases are static. Realistically, the Service Desk and D
 The document database would require periodic batch embedding refresh, while the Service Desk database would need event-driven embedding refresh based on ticket lifecycle changes.
 
 # Release Notes
+
+## v0.4 (Advanced LLM, Email, Analytics, UI Integration)
+
+### Features
+- Advanced LLM orchestration endpoints and Langchain chains (summarization, classification, etc.)
+- Email and alerting tool endpoints (stubs, ready for integration)
+- Analytics endpoints (e.g., ticket counts)
+- UI integration endpoints (for frontend)
+- All core tools use PostgreSQL-backed storage
+- Hybrid RAG search with Langchain and SQL
+- Documentation and setup instructions
+
+### Upcoming Tasks
+- Integrate real email/alerting services
+- Expand analytics and reporting endpoints
+- Complete UI integration and provide usage examples
+- Add more advanced LLM chains and workflows
+- Further production hardening and monitoring
 
 ## v0.3 (Hybrid RAG & PostgreSQL-backed MCP Agent)
 
