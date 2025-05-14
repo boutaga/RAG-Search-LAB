@@ -4,6 +4,36 @@
 
 This repository has educational purpose on advanced RAG Search techniques based on PostgreSQL-pgvector-pgvectorscale-pgai...
 
+## MCP Server for SD Agent
+
+A new MCP server project `custom-agent-tools` has been added to this repository to support the Service Desk AI Agent with modular tools and resources.
+
+### Features added in MCP server:
+
+- Chat interaction logging as resources and tool to add chat logs
+- Ticket management as resources and tool to update tickets
+- Search tool to query chat logs and tickets by keyword
+- Feedback submission tool and resources
+- Problem linking tool and resources
+
+This MCP server enables flexible and extensible integration of these functionalities with the AI Agent backend.
+
+The MCP server project is located in the `custom-agent-tools` directory and can be built and run independently.
+
+### How to build and run the MCP server:
+
+```bash
+cd custom-agent-tools
+npm install
+npm run build
+node build/index.js
+```
+
+### Integration
+
+Once running, the MCP server exposes tools and resources accessible via the Model Context Protocol, allowing the AI Agent to offload these responsibilities.
+
+Please refer to the `custom-agent-tools/README.md` for more details on the MCP server implementation and usage.
 
 
 ## The AI agent Service Desk example
@@ -99,17 +129,4 @@ Regarding the Service Desk database, you would need an event that would trigger 
 to process the embedding again and this might happen a lot especially in the early stages of the ticket lifecycle since new informations will be flowing with the investigation. 
 I guess it makes sense then to only process new tickets after some time or after a certain level of status is reached. Some fields like alert content could be process right away though since they 
 might not change at all after the ticket creation. 
-In all case we will need to trace how much a field that is part of an embedding is changed in order to be able to refresh the embedding automatically. 
-
-
-
-
-
-
-
-
-
-
-
-
-
+In all case we will need to trace how much a field that is part of an embedding is changed in order to be able to refresh the embedding automatically.
