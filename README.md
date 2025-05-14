@@ -161,6 +161,22 @@ The document database would require periodic batch embedding refresh, while the 
 
 # Release Notes
 
+## v0.3 (Hybrid RAG & PostgreSQL-backed MCP Agent)
+
+### Features
+- Python-based MCP server (`custom-agent-tools-py`) now uses Langchain for hybrid RAG search (dense + sparse retrieval)
+- All core tools (chat logging, ticket management, feedback, problem linking) now use PostgreSQL-backed storage in the AI agent database
+- FastAPI endpoints for all tools/resources
+- Search endpoint combines dense (vector) and sparse (keyword) retrieval using Langchain and SQL
+- Ready for further LLM orchestration and production database integration
+
+### Upcoming Tasks
+- Add advanced LLM orchestration endpoints and Langchain chains
+- Expand MCP tools for email, alerting, and analytics
+- UI improvements and integration with frontend
+- More robust error handling and monitoring
+- Usage examples and API documentation
+
 ## v0.2 (Python/Langchain MCP Agent Migration)
 
 ### Features
