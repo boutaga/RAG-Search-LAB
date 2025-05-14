@@ -4,7 +4,7 @@ This repository has educational purpose on advanced RAG Search techniques based 
 
 ## MCP Server for SD Agent
 
-A new MCP server project `custom-agent-tools` (TypeScript, v0.1) and `custom-agent-tools-py` (Python/Langchain, v0.2+) have been added to this repository to support the Service Desk AI Agent with modular tools and resources.
+A new MCP server project `custom-agent-tools` (TypeScript, v0.1, **deprecated**) and `custom-agent-tools-py` (Python/Langchain, v0.2+) have been added to this repository to support the Service Desk AI Agent with modular tools and resources.
 
 ### Features added in MCP server:
 
@@ -14,9 +14,11 @@ A new MCP server project `custom-agent-tools` (TypeScript, v0.1) and `custom-age
 - Feedback submission tool and resources
 - Problem linking tool and resources
 - (v0.3+) Hybrid RAG search with Langchain and PostgreSQL-backed storage
-- (v0.4) Advanced LLM orchestration, email/alerting/analytics tools, and UI integration endpoints
+- (v0.4+) Advanced LLM orchestration, email/alerting/analytics tools, and UI integration endpoints
+- (v0.6+) Real email/alerting integration, analytics, and UI endpoints
+- (v0.7) Multi-step LLM chains for ticket triage, root cause analysis, solution recommendation, conversation summarization, entity extraction, follow-up actions, hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops
 
-This MCP server enables flexible and extensible integration of these functionalities with the AI Agent backend.
+**Note:** The TypeScript MCP server (`custom-agent-tools`) is now deprecated. Please use the Python/Langchain version for all new development.
 
 The MCP server projects are located in the `custom-agent-tools` (TypeScript) and `custom-agent-tools-py` (Python) directories and can be built and run independently.
 
@@ -36,132 +38,23 @@ Once running, the MCP server exposes tools and resources accessible via the Mode
 
 Please refer to the `custom-agent-tools/README.md` and `custom-agent-tools-py/README.md` for more details on the MCP server implementation and usage.
 
-
-## The AI agent Service Desk example
-
-In order to expose a real use cases and prove the point and added value of advanced RAG Search techniques, I created the following data sources
-and the associated scenario of a Service Desk team that would take leverage of AI/LLM and RAG Search techniques.   
-An AI Agent for the Service Desk team is holding the business logic and has deferent tools like email, document management,... This AI Agent also take leverage of
-the RAG Search process that is at the center of experiment. The goal is to explain how different RAG search techniques can impact the response of the Agent.
-
-
-Intent of the solution and added value expected : 
-
-- Faster Time to Resolution for teams.
-- Improvements on the quality of service. 
-    - avoid having twice the same error by learning from past resolution
-    - link alerts with solutions
-    - link SOP with best practices
-    - no hanging tickets with automated routing
-    - KPI generation for mgmt
-
-
-## Architecture
-
-The architecture consists of three main PostgreSQL databases (Documents, Service Desk, and RAG/AI Agent), a FastAPI backend (RAG_Scripts), and an MCP server for modular agent tools. The AI agent interacts with all databases and the MCP server to provide advanced RAG search, ticket management, and feedback workflows.
-
-```
-+-------------------+      +-------------------+      +-------------------+
-| Documents DB      |      | Service Desk DB   |      | RAG/AI Agent DB   |
-+-------------------+      +-------------------+      +-------------------+
-         |                          |                          |
-         +--------------------------+--------------------------+
-                                    |
-                             +----------------+
-                             |   FastAPI      |
-                             |  (RAG_Scripts) |
-                             +----------------+
-                                    |
-                             +----------------+
-                             |   MCP Server   |
-                             | (custom tools) |
-                             +----------------+
-```
-
-# Documents database
-
-This is a sample database that is storing information about document storage applications like Sharepoint or M-Files. 
-The intent is to store SOP (Standard Operational Procedures) in various formats like PDF or Markdown to allow retrieval from the RAG Search workflow. 
-The database holds metadata information of the documents and links to their real paths on the file system. 
-
-## Description of the data model
-
-- `users`: Authors and reviewers of documents
-- `categories`: Document categories (e.g., expertise areas)
-- `document`: Partitioned table for document metadata (title, description, version, status, author, reviewer, category, file path, format, etc.)
-- Full-text search vector for efficient retrieval
-
-# Service Desk database 
-
-This database is a sample database of customer service requests made on technologies like PostgreSQL, SQL Server, Oracle, RHEL, Ubuntu, etc. 
-It is designed to simulate a real-world service desk environment for testing RAG search and AI agent workflows.
-
-## Description of the data model
-
-- `ticket`: Partitioned table for service desk tickets (title, description, status, priority, type, organization, requester, assignee, SLA, etc.)
-- Lookup tables for status, priority, type, SLA, organization, user, configuration items, and relationships
-- Partitioning by closure date for efficient management of open/closed tickets
-
-# RAG database (AI Agent database)
-
-This database manages the RAG search process and agent context. It holds user profile information, document embeddings, chat logs, retrieval history, feedback, and links to external tickets and problems.
-
-## Description of the data model 
-
-- `documents`: Metadata for documents referenced in RAG search
-- `kb_chunks`: Chunks of documents with dense and sparse embeddings (pgvector, vectorscale)
-- `conversations`, `chat_logs`, `retrieval_history`: Tracks user-agent interactions and retrievals
-- `external_tickets`, `problems`, `solutions`, `ticket_problem_links`: Links to service desk tickets, known problems, and validated solutions
-- `feedback`, `escalation_rules`, `applied_solutions`, `alerts`: Feedback, escalation, and alert tracking
-
-# Hybrid RAG Search design 
-
-The system supports hybrid RAG search using both dense (vector) and sparse (keyword) retrieval, with dynamic weighting and reranking. Embeddings are refreshed as needed based on ticket/document changes.
-
-## refresh embeddings 
-
-Embeddings are refreshed for tickets/documents when significant changes are detected (e.g., ticket status changes, new information added). The system tracks changes to fields that are part of the embedding and triggers re-embedding as needed.
-
-## manual vs dynamic weights 
-
-The agent dynamically adjusts the weighting between dense and sparse retrieval based on the query type (e.g., technical/keyword vs. conceptual/natural language). Manual override is also possible for advanced users.
-
-# Data ingestion
-
-To test the relevance of this model and find its limits, the databases are populated with realistic data that provides examples of nuances found in technical environments. The AI agent must provide highly technical information to experienced users, so data quality and embedding processing are critical.
-
-## Chunk sizes 
-
-Documents are chunked using heuristics (e.g., by section, paragraph, or token count) to optimize retrieval granularity and embedding quality.
-
-## Tokenization 
-
-Tokenization is performed using the embedding model's tokenizer to ensure compatibility and maximize embedding efficiency.
-
-## Embeddings refresh 
-
-Embeddings are refreshed periodically or when significant changes are detected in the source data.
-
-# Data retrieval 
-
-The system uses advanced indexing (pgvector, pgvectorscale) and hybrid search to retrieve relevant chunks, tickets, and solutions efficiently.
-
-## Indexes on pgvector-pgvectorscale 
-
-Indexes are created on embedding columns for fast vector search and on metadata for efficient filtering.
-
-# Limitations 
-
-- The databases are static in this example; in production, they would be live and require event-driven embedding refresh.
-- The AI agent currently uses hardcoded SQL queries and in-memory storage for some MCP tools; future work will include database-backed MCP tools and more dynamic workflows.
-- The system is designed for educational and experimental purposes and may require adaptation for production use.
-
-# Data flow 
-
-In this example, the databases are static. Realistically, the Service Desk and Documents databases would be live with continuously incoming data.
-The document database would require periodic batch embedding refresh, while the Service Desk database would need event-driven embedding refresh based on ticket lifecycle changes.
-
 # Release Notes
+
+## v0.7 (Advanced LLM Chains, RAG Enhancements)
+
+### Features
+- Multi-step LLM chains for ticket triage, root cause analysis, solution recommendation
+- Conversation summarization, entity extraction, follow-up actions
+- LLM provider selection (OpenAI, Azure, HuggingFace)
+- Hybrid reranking, context window optimization, dynamic prompt engineering, feedback loops (stubs)
+- All previous features (email, alerting, analytics, UI integration, PostgreSQL-backed storage, hybrid RAG)
+
+### Upcoming Tasks
+- Integrate additional alerting/email providers (e.g., Microsoft Teams, PagerDuty)
+- Expand analytics and reporting endpoints
+- Complete UI integration and provide usage examples
+- Add more advanced LLM chains and workflows
+- Further production hardening and monitoring
 
 ## v0.6 (Real Email/Alerting, Analytics, UI Integration)
 
