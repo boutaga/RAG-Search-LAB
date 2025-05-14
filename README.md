@@ -163,7 +163,26 @@ The document database would require periodic batch embedding refresh, while the 
 
 # Release Notes
 
-## v0.4 (Advanced LLM, Email, Analytics, UI Integration)
+## v0.6 (Real Email/Alerting, Analytics, UI Integration)
+
+### Features
+- Real email integration via SMTP (configurable via environment variables)
+- Real alerting integration via Slack webhook (configurable)
+- Analytics endpoints (e.g., ticket counts)
+- UI integration endpoints (for frontend)
+- All core tools use PostgreSQL-backed storage
+- Hybrid RAG search with Langchain and SQL
+- Advanced LLM orchestration endpoints and Langchain chains (summarization, classification, etc.)
+- Documentation and setup instructions
+
+### Upcoming Tasks
+- Integrate additional alerting/email providers (e.g., Microsoft Teams, PagerDuty)
+- Expand analytics and reporting endpoints
+- Complete UI integration and provide usage examples
+- Add more advanced LLM chains and workflows
+- Further production hardening and monitoring
+
+## v0.4 - v0.5 (Advanced LLM, Email, Analytics, UI Integration)
 
 ### Features
 - Advanced LLM orchestration endpoints and Langchain chains (summarization, classification, etc.)

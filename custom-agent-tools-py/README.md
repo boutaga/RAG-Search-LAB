@@ -1,4 +1,4 @@
-# custom-agent-tools-py (v0.4)
+# custom-agent-tools-py (v0.6)
 
 Python/Langchain MCP Server for SD Agent
 
@@ -14,7 +14,7 @@ This project is a Python-based MCP server for the Service Desk AI Agent, providi
 - Feedback submission tool and resource (PostgreSQL-backed)
 - Problem linking tool and resource (PostgreSQL-backed)
 - Advanced LLM orchestration endpoints (summarization, classification, etc.)
-- Email and alerting tool endpoints (stubs, ready for integration)
+- Email and alerting tool endpoints (real SMTP and Slack integration)
 - Analytics endpoints (e.g., ticket counts)
 - UI integration endpoints (for frontend)
 - Designed for easy extension with Langchain, FastAPI, and PostgreSQL
@@ -40,6 +40,13 @@ pip install langchain langchain-community fastapi uvicorn pydantic psycopg2-bina
 uvicorn main:app --reload
 ```
 
+## Email/Alerting Configuration
+
+Set the following environment variables for email and Slack integration:
+
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
+- `SLACK_WEBHOOK_URL`
+
 ## Migration Notes
 
 - This Python MCP server is a migration and enhancement of the deprecated TypeScript MCP agent.
@@ -48,15 +55,22 @@ uvicorn main:app --reload
 
 ## Release Notes
 
-### v0.4 (Current)
+### v0.6 (Current)
 
-- Advanced LLM orchestration endpoints and Langchain chains (summarization, classification, etc.)
-- Email and alerting tool endpoints (stubs, ready for integration)
+- Real email integration via SMTP (configurable)
+- Real alerting integration via Slack webhook (configurable)
 - Analytics endpoints (e.g., ticket counts)
 - UI integration endpoints (for frontend)
 - All core tools use PostgreSQL-backed storage
 - Hybrid RAG search with Langchain and SQL
 - Documentation and setup instructions
+
+### v0.4-v0.5
+
+- Advanced LLM orchestration endpoints and Langchain chains (summarization, classification, etc.)
+- Email and alerting tool endpoints (stubs, ready for integration)
+- Analytics endpoints (e.g., ticket counts)
+- UI integration endpoints (for frontend)
 
 ### v0.3
 
@@ -72,7 +86,7 @@ uvicorn main:app --reload
 
 ## Upcoming Tasks
 
-- Integrate real email/alerting services
+- Integrate additional alerting/email providers (e.g., Microsoft Teams, PagerDuty)
 - Expand analytics and reporting endpoints
 - Complete UI integration and provide usage examples
 - Add more advanced LLM chains and workflows

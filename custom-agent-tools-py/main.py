@@ -1,8 +1,9 @@
 """
-custom-agent-tools-py v0.4
+custom-agent-tools-py v0.6
 
 Python/Langchain MCP Server for SD Agent
-Implements modular tools for chat logging, ticket management, search, feedback, problem linking, and now advanced LLM orchestration, email, alerting, and analytics.
+Implements modular tools for chat logging, ticket management, search, feedback, problem linking, advanced LLM orchestration, email, alerting, and analytics.
+Now with real email and alerting service integration.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -15,14 +16,17 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.chains import RetrievalQA, LLMChain, SequentialChain
+from langchain.chains import RetrievalQA, LLMChain
 from langchain.llms import OpenAI
 from langchain.prompts import PromptTemplate
+import smtplib
+from email.message import EmailMessage
+import requests
 
 app = FastAPI(
     title="SD-MCP Python Agent",
-    version="0.4",
-    description="Python/Langchain MCP server for Service Desk Agent with hybrid RAG, LLM orchestration, and advanced tools"
+    version="0.6",
+    description="Python/Langchain MCP server for Service Desk Agent with hybrid RAG, LLM orchestration, email, alerting, and analytics"
 )
 
 # Database connection (AI agent database)
@@ -81,6 +85,43 @@ class ProblemLink(BaseModel):
     problem_id: str
     link_type: str
     created_at: str
+
+# Email integration (SMTP)
+def send_email_smtp(to: str, subject: str, body: str):
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    from_addr = os.getenv("EMAIL_FROM", smtp_user)
+    if not all([smtp_host, smtp_user, smtp_pass, from_addr]):
+        raise HTTPException(status_code=500, detail="SMTP configuration missing")
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = to
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email send failed: {e}")
+
+# Alerting integration (Slack webhook example)
+def send_alert_slack(message: str, severity: str = "info"):
+    slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
+    if not slack_webhook:
+        raise HTTPException(status_code=500, detail="Slack webhook not configured")
+    payload = {
+        "text": f"[{severity.upper()}] {message}"
+    }
+    try:
+        resp = requests.post(slack_webhook, json=payload, timeout=10)
+        if resp.status_code != 200:
+            raise Exception(f"Slack webhook error: {resp.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Alert send failed: {e}")
 
 # Chat log endpoints (PostgreSQL-backed)
 @app.post("/chatlog", response_model=ChatLog)
@@ -218,19 +259,19 @@ def summarize_ticket(ticket_id: str):
     summary = summary_chain.run(ticket=row["ticket_summary"])
     return {"ticket_id": ticket_id, "summary_and_urgency": summary}
 
-# Email/alerting/analytics tool endpoints (stubs for v0.4)
+# Email integration endpoint (real SMTP)
 @app.post("/notify/email")
 def send_email(to: str, subject: str, body: str):
-    # TODO: Integrate with real email service
-    print(f"Email sent to {to}: {subject}\n{body}")
+    send_email_smtp(to, subject, body)
     return {"status": "sent", "to": to, "subject": subject}
 
+# Alerting integration endpoint (real Slack webhook)
 @app.post("/notify/alert")
 def send_alert(message: str, severity: str = "info"):
-    # TODO: Integrate with real alerting system
-    print(f"Alert ({severity}): {message}")
+    send_alert_slack(message, severity)
     return {"status": "alerted", "severity": severity}
 
+# Analytics endpoints
 @app.get("/analytics/ticket-counts")
 def ticket_counts():
     with get_pg_conn() as conn:
