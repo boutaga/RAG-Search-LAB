@@ -1,5 +1,3 @@
-
-
 # RAG-Search-LAB
 
 This repository has educational purpose on advanced RAG Search techniques based on PostgreSQL-pgvector-pgvectorscale-pgai...
@@ -57,76 +55,131 @@ Intent of the solution and added value expected :
 
 ## Architecture
 
-![image](https://github.com/user-attachments/assets/5b8d301b-3e73-4d8e-a7b5-a3c5a7453ccd)
+The architecture consists of three main PostgreSQL databases (Documents, Service Desk, and RAG/AI Agent), a FastAPI backend (RAG_Scripts), and an MCP server for modular agent tools. The AI agent interacts with all databases and the MCP server to provide advanced RAG search, ticket management, and feedback workflows.
 
+```
++-------------------+      +-------------------+      +-------------------+
+| Documents DB      |      | Service Desk DB   |      | RAG/AI Agent DB   |
++-------------------+      +-------------------+      +-------------------+
+         |                          |                          |
+         +--------------------------+--------------------------+
+                                    |
+                             +----------------+
+                             |   FastAPI      |
+                             |  (RAG_Scripts) |
+                             +----------------+
+                                    |
+                             +----------------+
+                             |   MCP Server   |
+                             | (custom tools) |
+                             +----------------+
+```
 
 # Documents database
 
-This is a sample database that is storing informations about document storage application like Sharepoint or M-Files. 
-The intent is to store SOP (Standard Operationnal Procedures) in various format like pdf or makdown to allow retrieval from the RAG Search workflow. 
-It is important to note that the database is holding metadata informations of the documents and links of there real paths on the file system. 
+This is a sample database that is storing information about document storage applications like Sharepoint or M-Files. 
+The intent is to store SOP (Standard Operational Procedures) in various formats like PDF or Markdown to allow retrieval from the RAG Search workflow. 
+The database holds metadata information of the documents and links to their real paths on the file system. 
 
 ## Description of the data model
 
+- `users`: Authors and reviewers of documents
+- `categories`: Document categories (e.g., expertise areas)
+- `document`: Partitioned table for document metadata (title, description, version, status, author, reviewer, category, file path, format, etc.)
+- Full-text search vector for efficient retrieval
 
 # Service Desk database 
 
-This database is a sample database of customer service request made on technologies like PostgreSQL, SQL Server, Oracle, RHEL, Ubuntu, ...etc. 
-Since there is no sample source of information or model available this database was completely created for this purpose.
-
-
+This database is a sample database of customer service requests made on technologies like PostgreSQL, SQL Server, Oracle, RHEL, Ubuntu, etc. 
+It is designed to simulate a real-world service desk environment for testing RAG search and AI agent workflows.
 
 ## Description of the data model
 
+- `ticket`: Partitioned table for service desk tickets (title, description, status, priority, type, organization, requester, assignee, SLA, etc.)
+- Lookup tables for status, priority, type, SLA, organization, user, configuration items, and relationships
+- Partitioning by closure date for efficient management of open/closed tickets
 
-# RAG database
+# RAG database (AI Agent database)
 
-This database is to allow management of the RAG search process of our application. 
-It holds user profile information 
+This database manages the RAG search process and agent context. It holds user profile information, document embeddings, chat logs, retrieval history, feedback, and links to external tickets and problems.
 
 ## Description of the data model 
 
+- `documents`: Metadata for documents referenced in RAG search
+- `kb_chunks`: Chunks of documents with dense and sparse embeddings (pgvector, vectorscale)
+- `conversations`, `chat_logs`, `retrieval_history`: Tracks user-agent interactions and retrievals
+- `external_tickets`, `problems`, `solutions`, `ticket_problem_links`: Links to service desk tickets, known problems, and validated solutions
+- `feedback`, `escalation_rules`, `applied_solutions`, `alerts`: Feedback, escalation, and alert tracking
 
 # Hybrid RAG Search design 
 
+The system supports hybrid RAG search using both dense (vector) and sparse (keyword) retrieval, with dynamic weighting and reranking. Embeddings are refreshed as needed based on ticket/document changes.
+
 ## refresh embeddings 
 
+Embeddings are refreshed for tickets/documents when significant changes are detected (e.g., ticket status changes, new information added). The system tracks changes to fields that are part of the embedding and triggers re-embedding as needed.
 
-## manual vs dynamic wheigts 
+## manual vs dynamic weights 
 
-
+The agent dynamically adjusts the weighting between dense and sparse retrieval based on the query type (e.g., technical/keyword vs. conceptual/natural language). Manual override is also possible for advanced users.
 
 # Data ingestion
 
-In order to test the relevance of this model and find its limits, it is important to feed the databases with realistic data that will 
-provide examples of nunances found in the technical environment. 
-The AI agent has to provide highly technical information to users that are experienced and avoid miss leading them, the quality of the data 
-as much as the way it is processed in the embedding process is a critical part. 
+To test the relevance of this model and find its limits, the databases are populated with realistic data that provides examples of nuances found in technical environments. The AI agent must provide highly technical information to experienced users, so data quality and embedding processing are critical.
 
 ## Chunk sizes 
 
+Documents are chunked using heuristics (e.g., by section, paragraph, or token count) to optimize retrieval granularity and embedding quality.
 
 ## Tokenization 
 
+Tokenization is performed using the embedding model's tokenizer to ensure compatibility and maximize embedding efficiency.
 
 ## Embeddings refresh 
 
+Embeddings are refreshed periodically or when significant changes are detected in the source data.
 
 # Data retrieval 
 
+The system uses advanced indexing (pgvector, pgvectorscale) and hybrid search to retrieve relevant chunks, tickets, and solutions efficiently.
 
 ## Indexes on pgvector-pgvectorscale 
 
+Indexes are created on embedding columns for fast vector search and on metadata for efficient filtering.
 
 # Limitations 
 
+- The databases are static in this example; in production, they would be live and require event-driven embedding refresh.
+- The AI agent currently uses hardcoded SQL queries and in-memory storage for some MCP tools; future work will include database-backed MCP tools and more dynamic workflows.
+- The system is designed for educational and experimental purposes and may require adaptation for production use.
 
-## Data flow 
+# Data flow 
 
-In this example the databases are static. Realistically, the databases of Service Desk and documents would be live with continuously incoming data.
-The document database wouldn't be much of challenge since the data won't change so much, so you could run a batch process periodically without much issues on precision and relevance. 
-Regarding the Service Desk database, you would need an event that would trigger the re-embedding of the tickets, for example. If a ticket changed drastically, it would make sense 
-to process the embedding again and this might happen a lot especially in the early stages of the ticket lifecycle since new informations will be flowing with the investigation. 
-I guess it makes sense then to only process new tickets after some time or after a certain level of status is reached. Some fields like alert content could be process right away though since they 
-might not change at all after the ticket creation. 
-In all case we will need to trace how much a field that is part of an embedding is changed in order to be able to refresh the embedding automatically.
+In this example, the databases are static. Realistically, the Service Desk and Documents databases would be live with continuously incoming data.
+The document database would require periodic batch embedding refresh, while the Service Desk database would need event-driven embedding refresh based on ticket lifecycle changes.
+
+# Release Notes
+
+## v0.1 (Initial Release)
+
+### Features
+- Three PostgreSQL databases: Documents, Service Desk, and RAG/AI Agent
+- FastAPI backend for RAG search and agent workflows
+- MCP server (`custom-agent-tools`) for modular agent tools:
+  - Chat logging
+  - Ticket management
+  - Search
+  - Feedback submission
+  - Problem linking
+- Hybrid RAG search with dense and sparse retrieval
+- Dynamic embedding refresh and weighting
+- Realistic data ingestion and chunking
+
+### Upcoming Tasks
+- Integrate PostgreSQL agent (e.g., xataio/agent) for database assessments
+- Add database-backed storage to MCP tools (currently in-memory)
+- Implement event-driven embedding refresh for live data
+- Expand MCP tools for email, alerting, and advanced analytics
+- UI improvements and integration with frontend
+- More robust error handling and monitoring
+- Documentation and usage examples
