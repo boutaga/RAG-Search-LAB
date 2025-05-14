@@ -18,6 +18,7 @@ A new MCP server project `custom-agent-tools` (TypeScript, v0.1, **deprecated**)
 - (v0.6+) Real email/alerting integration, analytics, and UI endpoints
 - (v0.7) Multi-step LLM chains for ticket triage, root cause analysis, solution recommendation, conversation summarization, entity extraction, follow-up actions, hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops
 - (v0.8) Expanded analytics and reporting endpoints, UI integration, usage examples, authentication/authorization
+- **(v0.9) Hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops (fully implemented in code)**
 
 **Note:** The TypeScript MCP server (`custom-agent-tools`) is now deprecated. Please use the Python/Langchain version for all new development.
 
@@ -40,6 +41,22 @@ Once running, the MCP server exposes tools and resources accessible via the Mode
 Please refer to the `custom-agent-tools/README.md` and `custom-agent-tools-py/README.md` for more details on the MCP server implementation and usage.
 
 # Release Notes
+
+## v0.9 (Hybrid Reranking, Context Window, Dynamic Prompting, Feedback Loops)
+
+### Features
+- Hybrid reranking: combine dense and sparse retrieval results with configurable weights or LLM-based scoring
+- Context window optimization: select most relevant chunks for LLM context, respect token limits
+- Dynamic prompt engineering: adapt prompts based on context, user, and query
+- Feedback loops: endpoints and logic for collecting and using user feedback to improve retrieval and LLM output
+- All previous features (analytics, UI integration, LLM chains, hybrid RAG, email/alerting, PostgreSQL-backed storage)
+
+### Upcoming Tasks
+- Integrate additional alerting/email providers (e.g., Microsoft Teams, PagerDuty)
+- Expand analytics and reporting endpoints
+- Complete UI integration and provide usage examples
+- Add more advanced LLM chains and workflows
+- Further production hardening and monitoring
 
 ## v0.8 (Analytics, Reporting, UI Integration)
 
