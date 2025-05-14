@@ -2,6 +2,67 @@
 
 This repository has educational purpose on advanced RAG Search techniques based on PostgreSQL-pgvector-pgvectorscale-pgai...
 
+---
+
+## Getting Started
+
+This project consists of several main components:
+
+### 1. PostgreSQL Databases
+
+- **Documents Database:** Stores SOPs and document metadata.
+- **Service Desk Database:** Stores tickets, users, organizations, and related service desk data.
+- **RAG/AI Agent Database:** Stores embeddings, chat logs, retrieval history, feedback, and agent context.
+
+**Setup:**  
+- Use the provided SQL files in `database_documents/`, `database_SD/`, and `database_AI_agent/` to create and populate the databases.
+- Ensure PostgreSQL is running and accessible.
+
+### 2. FastAPI Backend (`RAG_Scripts/main.py`)
+
+- Handles RAG search, ticket management, document retrieval, and agent workflows.
+- Connects to all three PostgreSQL databases.
+- Implements hybrid RAG, LLM orchestration, and business logic.
+
+**Setup:**
+```bash
+cd RAG_Scripts
+pip install -r requirements.txt  # or install FastAPI, SQLAlchemy, etc.
+uvicorn main:app --reload
+```
+- Configure database connection strings as needed in the environment or code.
+
+### 3. MCP Server (`custom-agent-tools-py`)
+
+- Python/Langchain-based modular server for chat logging, ticket management, search, feedback, problem linking, LLM chains, analytics, notifications, and UI integration.
+- All new development should use this Python version (TypeScript version is deprecated).
+
+**Setup:**
+```bash
+cd custom-agent-tools-py
+python -m venv venv
+venv/Scripts/activate  # On Windows
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+- Set environment variables for database and integrations (see README in the directory).
+
+### 4. Frontend/UI (Planned)
+
+- A React/Vue/Angular frontend can be built to interact with the FastAPI and MCP server endpoints.
+- UI components: chat, ticket management, analytics dashboards, feedback forms, real-time updates.
+
+### 5. Usage Examples
+
+- Example API calls (curl, Python, Postman) are provided in the documentation and `/usage/example` endpoint of the MCP server.
+- Sample workflows: creating a ticket, searching knowledge, submitting feedback, analytics export.
+
+### 6. Authentication/Authorization
+
+- JWT/OAuth2 authentication and role-based access are stubbed and can be enabled for both backend and MCP server.
+
+---
+
 ## MCP Server for SD Agent
 
 A new MCP server project `custom-agent-tools` (TypeScript, v0.1, **deprecated**) and `custom-agent-tools-py` (Python/Langchain, v0.2+) have been added to this repository to support the Service Desk AI Agent with modular tools and resources.
