@@ -12,7 +12,26 @@ This guide explains how to install and configure all components of RAG-Search-LA
 
 ---
 
-## 1. Configuration
+## 1. Download the Repository
+
+Choose one of the following methods to download the RAG-Search-LAB files to your Linux server:
+
+**Using Git (recommended):**
+```sh
+git clone https://github.com/your-org/RAG-Search-LAB.git
+cd RAG-Search-LAB
+```
+
+**Using wget (if git is not available):**
+```sh
+wget https://github.com/your-org/RAG-Search-LAB/archive/refs/heads/main.zip
+unzip main.zip
+cd RAG-Search-LAB-main
+```
+
+---
+
+## 2. Configuration
 
 Edit `installation/config.env` to set all required parameters:
 
@@ -28,7 +47,7 @@ nano installation/config.env
 
 ---
 
-## 2. Run the Installer
+## 3. Run the Installer
 
 From the repository root:
 
@@ -46,7 +65,7 @@ The script will:
 
 ---
 
-## 3. Service Management
+## 4. Service Management
 
 To check status:
 ```sh
@@ -68,14 +87,14 @@ journalctl -u raglab-mcp -f
 
 ---
 
-## 4. Customization
+## 5. Customization
 
 - All ports, paths, and credentials are set in `installation/config.env`.
 - To change service names, update the config and re-run the installer.
 
 ---
 
-## 5. Troubleshooting
+## 6. Troubleshooting
 
 - Ensure you run the installer as root (with `sudo`).
 - Check the output for any errors during installation.
@@ -84,7 +103,7 @@ journalctl -u raglab-mcp -f
 
 ---
 
-## 6. Uninstallation
+## 7. Uninstallation
 
 To remove services:
 ```sh
@@ -101,7 +120,7 @@ rm -rf /opt/raglab
 
 ---
 
-## 7. Next Steps
+## 8. Next Steps
 
 - The backend API will be available at `http://<server>:<FASTAPI_PORT>/`
 - The MCP server will be available at `http://<server>:<MCP_PORT>/`
@@ -109,6 +128,6 @@ rm -rf /opt/raglab
 
 ---
 
-## 8. Support
+## 9. Support
 
 For more details, see the main `README.md` or open an issue in the repository.
