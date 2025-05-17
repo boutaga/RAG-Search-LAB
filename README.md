@@ -41,6 +41,16 @@ This repository has educational purpose on advanced RAG Search techniques based 
 
 ## Getting Started
 
+**Automated installation is now available!**
+
+See [installation/README.md](installation/README.md) for step-by-step instructions to install and configure all components (PostgreSQL, FastAPI backend, MCP server) on a single Linux server.
+
+---
+
+## Manual Setup (Legacy)
+
+If you prefer to set up components manually, see the instructions below.
+
 This project consists of several main components:
 
 ### 1. PostgreSQL Databases
@@ -49,7 +59,7 @@ This project consists of several main components:
 - **Service Desk Database:** Stores tickets, users, organizations, and related service desk data.
 - **RAG/AI Agent Database:** Stores embeddings, chat logs, retrieval history, feedback, and agent context.
 
-**Setup:**  
+**Manual Setup:**  
 - Use the provided SQL files in `database_documents/`, `database_SD/`, and `database_AI_agent/` to create and populate the databases.
 - Ensure PostgreSQL is running and accessible.
 
@@ -59,7 +69,7 @@ This project consists of several main components:
 - Connects to all three PostgreSQL databases.
 - Implements hybrid RAG, LLM orchestration, and business logic.
 
-**Setup:**
+**Manual Setup:**
 ```bash
 cd RAG_Scripts
 pip install -r requirements.txt  # or install FastAPI, SQLAlchemy, etc.
@@ -72,7 +82,7 @@ uvicorn main:app --reload
 - Python/Langchain-based modular server for chat logging, ticket management, search, feedback, problem linking, LLM chains, analytics, notifications, and UI integration.
 - All new development should use this Python version (TypeScript version is deprecated).
 
-**Setup:**
+**Manual Setup:**
 ```bash
 cd custom-agent-tools-py
 python -m venv venv

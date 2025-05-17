@@ -1,0 +1,14 @@
+[Unit]
+Description=RAG-Search-LAB FastAPI Backend
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=${INSTALL_USER}
+WorkingDirectory=${INSTALL_BASE}
+EnvironmentFile=${INSTALL_BASE}/installation/config.env
+ExecStart=${INSTALL_BASE}/installation/raglab-fastapi.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
