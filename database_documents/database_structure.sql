@@ -25,7 +25,7 @@ CREATE TABLE user_categories (
 );
 
 
--- 5. Create the partitioned parent table
+-- 5. Document table
 CREATE TABLE document (
   document_id    BIGSERIAL,
   title          VARCHAR(255)  NOT NULL,
@@ -35,56 +35,46 @@ CREATE TABLE document (
   created_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
   effective_date DATE          NOT NULL,
-  archived_date  DATE,                                        -- key for partitioning
-  author_id      BIGINT       NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
-  reviewer_id    BIGINT        REFERENCES users(user_id) ON DELETE SET NULL,
-  category_id    BIGINT        REFERENCES categories(category_id) ON DELETE SET NULL,
-  file_path      TEXT          NOT NULL,
-  format         doc_format    NOT NULL,
+  archived_date  DATE          NOT NULL DEFAULT 'infinity',          -- not NULL anymore
+  author_id      BIGINT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+  reviewer_id    BIGINT         REFERENCES users(user_id) ON DELETE SET NULL,
+  category_id    BIGINT         REFERENCES categories(category_id) ON DELETE SET NULL,
+  file_path      TEXT           NOT NULL,
+  format         doc_format     NOT NULL,
   file_size      BIGINT,
   page_count     INT,
   search_vector  TSVECTOR GENERATED ALWAYS AS (
-                    to_tsvector('english',
-                      coalesce(title,'') || ' ' || coalesce(description,'')
-                    )
-                  ) STORED,
+                   to_tsvector('english', coalesce(title,'') || ' ' || coalesce(description,''))
+                 ) STORED,
   PRIMARY KEY (document_id, archived_date)
 ) PARTITION BY RANGE (archived_date);
 
--- 5.1 Catches rows where archived_date IS NULL (i.e., still active)
-CREATE TABLE document_current PARTITION OF document
-  DEFAULT;
+-- 5.1 live documents
+CREATE TABLE document_live PARTITION OF document
+  FOR VALUES FROM ('infinity') TO (MAXVALUE);
 
-
--- 5.2 Dynamically create yearly partitions for the next 10 years
+-- 5.2 yearly archives
 DO $$
 DECLARE
-  start_year INT := EXTRACT(YEAR FROM CURRENT_DATE)::INT;
-  end_year   INT := start_year + 10;
-  yr         INT;
+  yr INT := EXTRACT(YEAR FROM CURRENT_DATE)::INT;
 BEGIN
-  FOR yr IN start_year..end_year LOOP
-    EXECUTE FORMAT(
-      'CREATE TABLE IF NOT EXISTS document_%s PARTITION OF document
-         FOR VALUES FROM (%L) TO (%L);',
+  FOR yr IN yr..(yr+10) LOOP
+    EXECUTE format(
+      $q$CREATE TABLE IF NOT EXISTS document_%s PARTITION OF document
+          FOR VALUES FROM (%L) TO (%L);$q$,
       yr,
-      TO_CHAR(MAKE_DATE(yr,1,1),   'YYYY-MM-DD'),
-      TO_CHAR(MAKE_DATE(yr+1,1,1), 'YYYY-MM-DD')
+      make_date(yr,1,1),
+      make_date(yr+1,1,1)
     );
   END LOOP;
-END
-$$;
+END$$;
 
-
--- 6. Indexes for Performance
+-- 6. Indexes
 CREATE INDEX idx_document_category        ON document (category_id);
 CREATE INDEX idx_document_effective_date  ON document (effective_date);
 CREATE INDEX idx_document_archived_date   ON document (archived_date);
-
--- optional: tighter index only for “active” documents
-CREATE INDEX idx_document_status_active
-            ON document (archived_date)
-         WHERE status = 'active';
-
+CREATE INDEX idx_document_status_active   ON document (archived_date) WHERE status='active';
 CREATE INDEX idx_document_search_vec      ON document USING GIN (search_vector);
-CREATE UNIQUE INDEX idx_document_file_path ON document (file_path);
+CREATE UNIQUE INDEX idx_document_file_path ON document (file_path, archived_date);
+
+CREATE INDEX idx_user_categories_category ON user_categories (category_id);
