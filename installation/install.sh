@@ -118,7 +118,13 @@ psql_super -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname =
 
 # Create databases if not exist and grant privileges
 for DB in "$PG_DOCUMENTS_DB" "$PG_SD_DB" "$PG_AI_AGENT_DB"; do
-  psql_super -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '$DB') THEN CREATE DATABASE $DB OWNER $PG_APP_USER; END IF; END \$\$;"
+  # Check if database exists
+  if ! psql_super -lqt | cut -d \| -f 1 | grep -qw "$DB"; then
+    echo "Creating database $DB..."
+    psql_super -c "CREATE DATABASE $DB OWNER $PG_APP_USER;"
+  else
+    echo "Database $DB already exists."
+  fi
   psql_super -d "$DB" -c "GRANT ALL PRIVILEGES ON DATABASE $DB TO $PG_APP_USER;"
 done
 
