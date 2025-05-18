@@ -97,7 +97,12 @@ sleep 3
 
 # Function to run SQL as postgres superuser
 function psql_super() {
-  sudo -u postgres psql -v ON_ERROR_STOP=1 "$@"
+  # Use PSQL_PATH from config if set, otherwise fallback to psql in PATH
+  if [[ -n "$PSQL_PATH" ]]; then
+    sudo -u postgres "$PSQL_PATH" -v ON_ERROR_STOP=1 "$@"
+  else
+    sudo -u postgres psql -v ON_ERROR_STOP=1 "$@"
+  fi
 }
 
 # Create application user if not exists
