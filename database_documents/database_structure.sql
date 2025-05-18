@@ -77,10 +77,14 @@ $$;
 
 
 -- 6. Indexes for Performance
-CREATE INDEX ON procedures (status);
-CREATE INDEX ON procedures (category_id);
-CREATE INDEX ON procedures (effective_date);
-CREATE INDEX ON procedures (expiry_date);
-CREATE INDEX ON procedures USING GIN (search_vector);
-CREATE INDEX ON user_categories (category_id);
-CREATE INDEX ON procedures (file_path);
+CREATE INDEX idx_document_category        ON document (category_id);
+CREATE INDEX idx_document_effective_date  ON document (effective_date);
+CREATE INDEX idx_document_archived_date   ON document (archived_date);
+
+-- optional: tighter index only for “active” documents
+CREATE INDEX idx_document_status_active
+            ON document (archived_date)
+         WHERE status = 'active';
+
+CREATE INDEX idx_document_search_vec      ON document USING GIN (search_vector);
+CREATE UNIQUE INDEX idx_document_file_path ON document (file_path);
