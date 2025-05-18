@@ -6,6 +6,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+import pathlib
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -52,6 +53,21 @@ AsyncSDSessionLocal = sessionmaker(sd_engine, class_=AsyncSession, expire_on_com
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Serve frontend build (React) from /
+FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount(
+        "/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend"
+    )
+    # Optionally, add a catch-all route for client-side routing
+    from fastapi.responses import FileResponse
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        index_file = FRONTEND_DIST / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+        return {"detail": "Frontend build not found"}, 404
 
 # CORS
 app.add_middleware(

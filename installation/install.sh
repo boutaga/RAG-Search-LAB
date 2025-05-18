@@ -224,9 +224,9 @@ if [[ -d "$FRONTEND_DIR" ]]; then
     echo "VITE_API_URL=http://localhost:8000" > .env
     chown "$INSTALL_USER":"$INSTALL_USER" .env
   fi
-  echo "To start the frontend UI (dev mode):"
-  echo "  cd $FRONTEND_DIR && npm run dev"
-  echo "For production, use: npm run build"
+  echo "Building frontend for production..."
+  sudo -u "$INSTALL_USER" npm run build
+  echo "Frontend build complete. The app will be served by FastAPI at the root path."
 else
   echo "WARNING: Frontend directory not found at $FRONTEND_DIR"
 fi
