@@ -27,7 +27,7 @@ CREATE TABLE user_categories (
 
 -- 5. Create the partitioned parent table
 CREATE TABLE document (
-  document_id    BIGSERIAL     PRIMARY KEY,
+  document_id    BIGSERIAL,
   title          VARCHAR(255)  NOT NULL,
   description    TEXT,
   version        VARCHAR(50)   NOT NULL,
@@ -47,7 +47,8 @@ CREATE TABLE document (
                     to_tsvector('english',
                       coalesce(title,'') || ' ' || coalesce(description,'')
                     )
-                  ) STORED
+                  ) STORED,
+  PRIMARY KEY (document_id, archived_date)
 ) PARTITION BY RANGE (archived_date);
 
 -- 5.1 Catches rows where archived_date IS NULL (i.e., still active)
