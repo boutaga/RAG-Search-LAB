@@ -97,11 +97,19 @@ sleep 3
 
 # Function to run SQL as postgres superuser
 function psql_super() {
-  # Use PSQL_PATH from config if set, otherwise fallback to psql in PATH
+  # Always include -p "$PG_PORT" and -h "$PG_HOST" if set
+  local PGPORT_OPT=""
+  local PGHOST_OPT=""
+  if [[ -n "$PG_PORT" ]]; then
+    PGPORT_OPT="-p $PG_PORT"
+  fi
+  if [[ -n "$PG_HOST" ]]; then
+    PGHOST_OPT="-h $PG_HOST"
+  fi
   if [[ -n "$PSQL_PATH" ]]; then
-    sudo -u postgres "$PSQL_PATH" -v ON_ERROR_STOP=1 "$@"
+    sudo -u postgres "$PSQL_PATH" $PGHOST_OPT $PGPORT_OPT -v ON_ERROR_STOP=1 "$@"
   else
-    sudo -u postgres psql -v ON_ERROR_STOP=1 "$@"
+    sudo -u postgres psql $PGHOST_OPT $PGPORT_OPT -v ON_ERROR_STOP=1 "$@"
   fi
 }
 
