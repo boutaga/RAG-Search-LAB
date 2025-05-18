@@ -18,13 +18,14 @@ Choose one of the following methods to download the RAG-Search-LAB files to your
 
 **Using Git (recommended):**
 ```sh
-git clone https://github.com/your-org/RAG-Search-LAB.git
+git clone https://github.com/boutaga/RAG-Search-LAB.git
+
 cd RAG-Search-LAB
 ```
 
 **Using wget (if git is not available):**
 ```sh
-wget https://github.com/your-org/RAG-Search-LAB/archive/refs/heads/main.zip
+wget https://github.com/boutaga/RAG-Search-LAB/archive/refs/heads/main.zip
 unzip main.zip
 cd RAG-Search-LAB-main
 ```
