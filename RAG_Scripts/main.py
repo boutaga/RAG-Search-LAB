@@ -3,7 +3,7 @@
 import os
 import uuid
 from fastapi import FastAPI, Depends, HTTPException, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient  # MCP integratio
 from sqlalchemy import text
 import torch
 from torch import Tensor
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Any, Optional, AsyncGenerator
 import numpy as np
 from fastapi.concurrency import run_in_threadpool
 import asyncio
@@ -156,6 +156,10 @@ async def startup():
     )
 
 # Pydantic models
+class ChatStreamRequest(BaseModel):
+    query: str
+    filters: Optional[Dict[str, List[str]]] = None
+
 class ChatRequest(BaseModel):
     message: str
 
@@ -338,24 +342,24 @@ async def validate_solution(
     await agent_db.commit()
     return {"solution_id": updated_id, "status": "updated"}
 
-@app.post("/api/chat")
-async def chat_endpoint(
-    req: ChatRequest, 
+@app.post("/chat/stream")
+async def chat_stream_endpoint(
+    req: ChatStreamRequest,
     agent_db: AsyncSession = Depends(get_agent_db),
     document_db: AsyncSession = Depends(get_document_db),
     sd_db: AsyncSession = Depends(get_sd_db)
 ):
-    query = req.message
-    conversation_id = uuid.uuid4()  # In production, store and reuse per session
+    """
+    Streams the assistant's response token-by-token using StreamingResponse.
+    """
+    query = req.query
+    filters = req.filters or {}
+    conversation_id = uuid.uuid4()
 
-    # 1. Dynamically adjust weights based on query content
     dense_weight, sparse_weight = adjust_weights(query)
-
-    # 2. Compute embeddings using imported functions
     dense_q = await run_in_threadpool(lambda: get_dense(query))
     sparse_q = await run_in_threadpool(lambda: get_sparse(query))
 
-    # 3. Dense retrieval from AI agent database (kb_chunks)
     vectorstore = PGVector.from_existing_table(
         connection_string=DATABASE_URL,
         embedding_function=embeddings,
@@ -366,7 +370,6 @@ async def chat_endpoint(
     dense_retriever = vectorstore.as_retriever(search_kwargs={"k": TOP_K})
     dense_docs = await run_in_threadpool(lambda: dense_retriever.get_relevant_documents(query))
 
-    # 4. Sparse retrieval via SQL on AI agent database
     sparse_sql = text("""
       SELECT kc.chunk_id, kc.chunk_text, d.title, 
              kc.sparse_embedding <=> :q AS dist,
@@ -378,17 +381,14 @@ async def chat_endpoint(
     """)
     sparse_rows = await agent_db.execute(sparse_sql.bindparams(q=sparse_q, k=TOP_K))
     sparse_results = sparse_rows.fetchall()
-    sparse_docs = [r.chunk_text for r in sparse_results]
 
-    # 5. Merge & rerank by weighted distance
     merged = {}
-    for doc, score in zip(dense_docs, [0.5] * len(dense_docs)):  # Placeholder scores
+    for doc, score in zip(dense_docs, [0.5] * len(dense_docs)):
         merged[doc.page_content] = {
             "dense": score, 
             "sparse": float("inf"),
             "doc_id": getattr(doc.metadata, "document_id", None) if hasattr(doc, "metadata") else None
         }
-    
     for row in sparse_results:
         if row.chunk_text in merged:
             merged[row.chunk_text]["sparse"] = row.dist
@@ -401,20 +401,16 @@ async def chat_endpoint(
                 "doc_id": row.document_id
             }
 
-    # 6. Weighted combine
     combined = sorted(
         merged.items(),
         key=lambda x: dense_weight * x[1]["dense"] + sparse_weight * x[1]["sparse"]
     )[:TOP_K]
-    
-    # Track the document IDs for logging
     doc_ids = [item[1]["doc_id"] for item in combined if item[1]["doc_id"]]
     context = "\n\n".join(f"{t}" for t, _ in combined)
 
-    # 7. Check if query relates to tickets
+    # Compose context as in the main chat endpoint
     ticket_info = ""
     if any(kw in query.lower() for kw in ["ticket", "issue", "problem", "incident"]):
-        # Get relevant ticket information from SD database
         ticket_sql = text("""
             SELECT t.ticket_id, t.title, ts.name AS status, tp.name AS priority, 
                    tt.name AS type, t.description 
@@ -434,15 +430,13 @@ async def chat_endpoint(
         """)
         ticket_rows = await sd_db.execute(ticket_sql)
         tickets = ticket_rows.fetchall()
-        
         if tickets:
             ticket_info = "Relevant tickets:\n" + "\n".join(
                 f"#{t.ticket_id}: {t.title} ({t.status}, {t.priority})" 
                 for t in tickets
             )
             context += "\n\n" + ticket_info
-    
-    # 8. Check for known problems and solutions from AI agent database
+
     problems_info = ""
     solutions_sql = text("""
         SELECT p.problem_id, p.title AS problem_title, p.description AS problem_desc,
@@ -456,7 +450,6 @@ async def chat_endpoint(
     """)
     solutions_rows = await agent_db.execute(solutions_sql)
     solutions = solutions_rows.fetchall()
-    
     if solutions:
         problems_info = "Known solutions that might help:\n" + "\n".join(
             f"Problem: {s.problem_title}\nSolution: {s.solution_title} (Effectiveness: {s.effectiveness}/5)" 
@@ -464,65 +457,87 @@ async def chat_endpoint(
         )
         context += "\n\n" + problems_info
 
-    # 9. Ask LLM with enhanced context
-    answer = await run_in_threadpool(lambda: qa_chain.run({"query": query, "context": context}))
+    # Streaming generator
+    async def token_stream() -> AsyncGenerator[bytes, None]:
+        # Simulate token streaming from LLM
+        answer = await run_in_threadpool(lambda: qa_chain.run({"query": query, "context": context}))
+        # For demonstration, split by whitespace as tokens
+        for token in answer.split():
+            yield (token + " ").encode("utf-8")
+            await asyncio.sleep(0.01)  # Simulate delay
+        # Optionally, yield a special end marker
+        # yield b"[END]"
 
-    # 10. Log the chat interaction in AI agent database
-    log_sql = text("""
-        INSERT INTO chat_logs 
-            (conversation_id, role, content, model_name, prompt_tokens, response_tokens, total_tokens)
-        VALUES (:conv_id, 'user', :msg, 'openai', :p_tokens, 0, :p_tokens)
-        RETURNING log_id
-    """)
-    user_log = await agent_db.execute(
-        log_sql.bindparams(
-            conv_id=conversation_id, 
-            msg=query, 
-            p_tokens=len(query.split())
-        )
-    )
-    user_log_id = user_log.scalar_one()
-    
-    # Log agent response
-    agent_log = await agent_db.execute(
-        text("""
+        # Log the chat interaction in AI agent database (as in /api/chat)
+        log_sql = text("""
             INSERT INTO chat_logs 
                 (conversation_id, role, content, model_name, prompt_tokens, response_tokens, total_tokens)
-            VALUES (:conv_id, 'agent', :msg, 'openai', 0, :r_tokens, :r_tokens)
+            VALUES (:conv_id, 'user', :msg, 'openai', :p_tokens, 0, :p_tokens)
             RETURNING log_id
-        """).bindparams(
-            conv_id=conversation_id, 
-            msg=answer, 
-            r_tokens=len(answer.split())
-        )
-    )
-    agent_log_id = agent_log.scalar_one()
-    
-    # Log retrieved documents
-    for i, doc_id in enumerate(doc_ids):
-        if doc_id:
-            await agent_db.execute(
-                text("""
-                    INSERT INTO retrieval_history
-                        (log_id, chunk_id, similarity_score, retrieved_at)
-                    VALUES (:log_id, :chunk_id, :score, now())
-                """).bindparams(
-                    log_id=user_log_id,
-                    chunk_id=doc_id,
-                    score=1.0/(i+1)  # Simple ranking score
-                )
+        """)
+        user_log = await agent_db.execute(
+            log_sql.bindparams(
+                conv_id=conversation_id, 
+                msg=query, 
+                p_tokens=len(query.split())
             )
-    
-    await agent_db.commit()
-    
-    # Return the agent's response with metadata
-    return {
-        "answer": answer,
-        "conversation_id": str(conversation_id),
-        "has_tickets": bool(ticket_info),
-        "has_solutions": bool(problems_info),
-        "search_strategy": f"Hybrid search (Dense: {dense_weight:.1f}, Sparse: {sparse_weight:.1f})"
-    }
+        )
+        user_log_id = user_log.scalar_one()
+        agent_log = await agent_db.execute(
+            text("""
+                INSERT INTO chat_logs 
+                    (conversation_id, role, content, model_name, prompt_tokens, response_tokens, total_tokens)
+                VALUES (:conv_id, 'agent', :msg, 'openai', 0, :r_tokens, :r_tokens)
+                RETURNING log_id
+            """).bindparams(
+                conv_id=conversation_id, 
+                msg=answer, 
+                r_tokens=len(answer.split())
+            )
+        )
+        agent_log_id = agent_log.scalar_one()
+        for i, doc_id in enumerate(doc_ids):
+            if doc_id:
+                await agent_db.execute(
+                    text("""
+                        INSERT INTO retrieval_history
+                            (log_id, chunk_id, similarity_score, retrieved_at)
+                        VALUES (:log_id, :chunk_id, :score, now())
+                    """).bindparams(
+                        log_id=user_log_id,
+                        chunk_id=doc_id,
+                        score=1.0/(i+1)
+                    )
+                )
+        await agent_db.commit()
+
+    return StreamingResponse(token_stream(), media_type="text/event-stream")
+
+@app.get("/chat/citations/{msg_id}")
+async def get_citations(msg_id: str, agent_db: AsyncSession = Depends(get_agent_db)):
+    """
+    Returns citations (retrieved chunks) for a given message/log_id.
+    """
+    # Find retrievals for this log_id
+    retrievals_sql = text("""
+        SELECT rh.chunk_id, d.title AS source, kc.page
+        FROM retrieval_history rh
+        JOIN kb_chunks kc ON rh.chunk_id = kc.chunk_id
+        JOIN documents d ON kc.document_id = d.document_id
+        WHERE rh.log_id = :log_id
+        ORDER BY rh.similarity_score DESC
+        LIMIT 10
+    """)
+    rows = await agent_db.execute(retrievals_sql.bindparams(log_id=msg_id))
+    citations = [
+        {
+            "chunk_id": r.chunk_id,
+            "source": r.source,
+            "page": r.page
+        }
+        for r in rows.fetchall()
+    ]
+    return citations
 
 @app.put("/api/tickets/{ticket_id}")
 async def update_ticket(

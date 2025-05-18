@@ -192,7 +192,43 @@ echo "Systemd services created and started:"
 echo "  - $FASTAPI_SERVICE_NAME.service"
 echo "  - $MCP_SERVICE_NAME.service"
 
-# --- Placeholder: Frontend UI setup (future) ---
-echo "=== [TODO] Frontend UI setup (future) ==="
+# --- Frontend UI setup ---
+echo "=== Frontend UI setup ==="
 
-echo "Installation skeleton complete. Fill in the TODO sections to complete the installer."
+# Check for Node.js and npm
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Node.js and npm not found. Installing Node.js..."
+  case "$DISTRO" in
+    debian|ubuntu)
+      apt-get install -y nodejs npm
+      ;;
+    rhel|rocky|almalinux|centos)
+      dnf install -y nodejs npm
+      ;;
+    suse|opensuse-leap|opensuse-tumbleweed)
+      zypper install -y nodejs npm
+      ;;
+    *)
+      echo "WARNING: Please install Node.js and npm manually for your distribution."
+      ;;
+  esac
+fi
+
+FRONTEND_DIR="$REPO_ROOT/frontend"
+if [[ -d "$FRONTEND_DIR" ]]; then
+  echo "Installing frontend dependencies in $FRONTEND_DIR"
+  cd "$FRONTEND_DIR"
+  sudo -u "$INSTALL_USER" npm install
+  # Set VITE_API_URL if not present
+  if [[ ! -f .env ]]; then
+    echo "VITE_API_URL=http://localhost:8000" > .env
+    chown "$INSTALL_USER":"$INSTALL_USER" .env
+  fi
+  echo "To start the frontend UI (dev mode):"
+  echo "  cd $FRONTEND_DIR && npm run dev"
+  echo "For production, use: npm run build"
+else
+  echo "WARNING: Frontend directory not found at $FRONTEND_DIR"
+fi
+
+echo "Installation complete. All components are set up."

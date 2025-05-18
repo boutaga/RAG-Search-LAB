@@ -120,14 +120,36 @@ rm -rf /opt/raglab
 
 ---
 
-## 8. Next Steps
+## 8. Frontend UI Setup
 
-- The backend API will be available at `http://<server>:<FASTAPI_PORT>/`
-- The MCP server will be available at `http://<server>:<MCP_PORT>/`
-- (Frontend UI integration is planned for future releases.)
+A full-featured React + Tailwind frontend is now included in `frontend/`. It provides a split-pane chat UI, streaming answers, and citation viewing.
+
+**To set up the frontend:**
+```sh
+cd frontend
+npm install
+# Set the FastAPI backend URL in .env:
+echo "VITE_API_URL=http://localhost:8000" > .env
+npm run dev
+```
+- The UI expects the FastAPI backend to be running and accessible at the URL set in `VITE_API_URL`.
+- For production, use `npm run build` and serve the static files.
+
+**Key Endpoints Used by the Frontend:**
+- `POST /chat/stream` — Streams chat responses (Server-Sent Events)
+- `GET /chat/citations/{msg_id}` — Returns citations for a message
 
 ---
 
-## 9. Support
+## 9. Next Steps
+
+- The backend API will be available at `http://<server>:<FASTAPI_PORT>/`
+- The MCP server will be available at `http://<server>:<MCP_PORT>/`
+- The frontend UI will be available at `http://<server>:<FRONTEND_PORT>/` (default: 5173 for Vite dev server)
+- See the main `README.md` for more details on endpoints and usage.
+
+---
+
+## 10. Support
 
 For more details, see the main `README.md` or open an issue in the repository.

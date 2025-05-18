@@ -33,7 +33,7 @@ This repository has educational purpose on advanced RAG Search techniques based 
 - **RAG/AI Agent DB:** Embeddings, chat logs, retrieval history, feedback, agent context, links to tickets/problems
 - **FastAPI Backend:** RAG search, ticket management, document retrieval, LLM orchestration, business logic
 - **MCP Server:** Modular tools for analytics, LLM chains, feedback, notifications, UI integration
-- **Frontend UI:** (Planned) React/Vue/Angular app for chat, ticket management, analytics, feedback
+- **Frontend UI:** React + Tailwind app for chat, streaming answers, citation viewing (see `frontend/`)
 
 ---
 
@@ -92,10 +92,26 @@ uvicorn main:app --reload
 ```
 - Set environment variables for database and integrations (see README in the directory).
 
-### 4. Frontend/UI (Planned)
+### 4. Frontend/UI
 
-- A React/Vue/Angular frontend can be built to interact with the FastAPI and MCP server endpoints.
-- UI components: chat, ticket management, analytics dashboards, feedback forms, real-time updates.
+A full-featured React + Tailwind frontend is included in `frontend/`. It provides a split-pane chat UI, streams answers from the backend, and displays citations in a dialog.
+
+**Setup:**
+```bash
+cd frontend
+npm install
+# Set the FastAPI backend URL in .env:
+echo "VITE_API_URL=http://localhost:8000" > .env
+npm run dev
+```
+- The UI expects the FastAPI backend to be running and accessible at the URL set in `VITE_API_URL`.
+- For production, use `npm run build` and serve the static files.
+
+**Key Endpoints Used by the Frontend:**
+- `POST /chat/stream` — Streams chat responses (Server-Sent Events)
+- `GET /chat/citations/{msg_id}` — Returns citations for a message
+
+UI components: chat, ticket management, analytics dashboards, feedback forms, real-time updates.
 
 ### 5. Usage Examples
 
@@ -174,7 +190,7 @@ Please refer to the `custom-agent-tools/README.md` and `custom-agent-tools-py/RE
   - Export analytics as CSV, Excel, or PDF
   - BI tool integration (Power BI, Tableau) via API (planned)
 - UI integration and usage examples:
-  - React/Vue/Angular frontend integration
+  - React frontend integration (see `frontend/`)
   - UI components for chat, ticket management, analytics dashboards, feedback forms
   - Real-time updates for alerts and ticket changes (WebSocket/polling)
   - Example API calls (curl, Python, Postman) and sample workflows
