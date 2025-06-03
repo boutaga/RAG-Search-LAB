@@ -181,11 +181,17 @@ setup_python_venv "$MCP_SRC" "$MCP_VENV_PATH"
 
 echo "Python virtual environments and dependencies setup complete."
 
-# --- Placeholder: FastAPI backend setup ---
-echo "=== [TODO] FastAPI backend setup ==="
+# --- FastAPI backend setup ---
+echo "=== FastAPI backend setup ==="
 
-# --- Placeholder: MCP server setup ---
-echo "=== [TODO] MCP server setup ==="
+# Sync repository to install base so services run independently of the
+# checkout location. We exclude the Git directory and common build
+# artifacts to keep the install lightweight.
+rsync -a --delete --exclude ".git" --exclude "node_modules" "$REPO_ROOT/" "$INSTALL_BASE/"
+chown -R "$INSTALL_USER":"$INSTALL_USER" "$INSTALL_BASE"
+
+# --- MCP server setup ---
+echo "=== MCP server setup ==="
 
 # --- Systemd service creation ---
 echo "=== Systemd service creation ==="

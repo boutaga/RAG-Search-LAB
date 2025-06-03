@@ -21,6 +21,12 @@ export PG_AI_AGENT_DB
 export PG_APP_USER
 export PG_APP_PASSWORD
 
+# Build SQLAlchemy URLs for the FastAPI app
+export DATABASE_URL="postgresql+asyncpg://${PG_APP_USER}:${PG_APP_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_AI_AGENT_DB}"
+export DOCUMENT_DB_URL="postgresql+asyncpg://${PG_APP_USER}:${PG_APP_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DOCUMENTS_DB}"
+export SD_DB_URL="postgresql+asyncpg://${PG_APP_USER}:${PG_APP_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_SD_DB}"
+export MCP_SERVERS="http://${MCP_HOST}:${MCP_PORT}"
+
 # Run FastAPI app
 cd "$REPO_ROOT/RAG_Scripts"
 exec uvicorn main:app --host "$FASTAPI_HOST" --port "$FASTAPI_PORT"
