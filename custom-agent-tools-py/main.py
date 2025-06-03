@@ -32,13 +32,18 @@ app = FastAPI(
 
 # Database connection (AI agent database)
 PG_CONN_STR = os.getenv("AI_AGENT_DB_URL", "dbname=agentdb user=user password=pass host=localhost")
+PGVECTOR_CONN_STR = os.getenv(
+    "PGVECTOR_CONN_STR",
+    "postgresql+psycopg2://user:pass@localhost/agentdb",
+)
+
 def get_pg_conn():
     return psycopg2.connect(PG_CONN_STR, cursor_factory=RealDictCursor)
 
 # Hybrid RAG setup
 embeddings = OpenAIEmbeddings()
 vectorstore = PGVector.from_existing_table(
-    connection_string="postgresql+psycopg2://user:pass@localhost/agentdb",
+    connection_string=PGVECTOR_CONN_STR,
     embedding_function=embeddings,
     table_name="kb_chunks",
     column_name="embedding",
