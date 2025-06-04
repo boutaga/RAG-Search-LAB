@@ -137,42 +137,66 @@ This guide provides an overview and usage examples for the main API endpoints ex
 
 - **Ticket Volume Over Time**
   ```
-  GET /analytics/ticket-volume?start=YYYY-MM-DD&end=YYYY-MM-DD
+  GET /analytics/ticket-volume?start=2024-01-01&end=2024-01-31
+  ```
+  Response:
+  ```json
+  {
+    "ticket_volume": [
+      {"day": "2024-01-01", "count": 5},
+      {"day": "2024-01-02", "count": 8}
+    ]
+  }
   ```
 
 - **Average Resolution Time**
   ```
-  GET /analytics/avg-resolution-time
+  GET /analytics/resolution-times
   ```
-
-- **Open/Closed Ratio**
-  ```
-  GET /analytics/open-closed-ratio
+  Response:
+  ```json
+  {"average_resolution_hours": 4.2}
   ```
 
 - **SLA Compliance**
   ```
-  GET /analytics/sla-compliance
+  GET /analytics/sla-compliance?hours=48
+  ```
+  Response:
+  ```json
+  {"sla_compliance_percent": 92.5}
   ```
 
 - **Agent Leaderboard**
   ```
-  GET /analytics/agent-leaderboard
+  GET /analytics/agent-leaderboard?limit=5
   ```
-
-- **Agent Satisfaction**
-  ```
-  GET /analytics/agent-satisfaction
+  Response:
+  ```json
+  {
+    "leaderboard": [
+      {"metric_name": "agent_alice", "metric_value": 120},
+      {"metric_name": "agent_bob", "metric_value": 110}
+    ]
+  }
   ```
 
 - **Document Usage**
   ```
   GET /analytics/document-usage
   ```
+  Response:
+  ```json
+  {
+    "document_usage": [
+      {"document_id": 1, "title": "Onboarding Guide", "count": 20}
+    ]
+  }
+  ```
 
 - **Export Analytics**
   ```
-  GET /analytics/export?type=ticket_volume
+  GET /analytics/export?type=ticket_volume&format=csv
   ```
 
 ### Authentication/Authorization

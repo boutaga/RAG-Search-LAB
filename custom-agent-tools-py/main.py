@@ -23,7 +23,9 @@ from email.message import EmailMessage
 import requests
 import csv
 from fastapi.responses import StreamingResponse
+from io import StringIO
 import json
+
 
 app = FastAPI(
     title="SD-MCP Python Agent",
@@ -203,6 +205,126 @@ def feedback_loop_endpoint(query: str, llm_output: str, rating: int, comments: O
     feedback_loop(llm_output, user_feedback)
     store_feedback(query, [], [], [], user_feedback, llm_output)
     return {"status": "feedback received"}
+
+
+"""Analytics Endpoints"""
+
+@app.get("/analytics/ticket-volume")
+def ticket_volume(start: str = Query(...), end: str = Query(...)):
+    """Return ticket counts per day between start and end dates."""
+    sql = (
+        "SELECT date_trunc('day', created_at) AS day, COUNT(*) AS count "
+        "FROM external_tickets WHERE created_at BETWEEN %s AND %s "
+        "GROUP BY day ORDER BY day"
+    )
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (start, end))
+            rows = cur.fetchall()
+    # Format datetime to date string
+    data = [{"day": r["day"].date().isoformat(), "count": r["count"]} for r in rows]
+    return {"ticket_volume": data}
+
+
+@app.get("/analytics/resolution-times")
+def resolution_times():
+    """Return average ticket resolution time in hours."""
+    sql = (
+        "SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))) AS avg_sec "
+        "FROM external_tickets WHERE resolved_at IS NOT NULL"
+    )
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            row = cur.fetchone()
+    avg_hours = (row["avg_sec"] or 0) / 3600
+    return {"average_resolution_hours": avg_hours}
+
+
+@app.get("/analytics/sla-compliance")
+def sla_compliance(hours: int = Query(48)):
+    """Return percentage of tickets resolved within the given SLA hours."""
+    sql = (
+        "SELECT COUNT(*) FILTER (WHERE resolved_at IS NOT NULL) AS resolved, "
+        "COUNT(*) FILTER (WHERE resolved_at IS NOT NULL AND resolved_at - created_at <= interval '%s hour') AS within_sla "
+        "FROM external_tickets" % hours
+    )
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            row = cur.fetchone()
+    resolved = row["resolved"] or 0
+    within = row["within_sla"] or 0
+    compliance = (within / resolved) * 100 if resolved > 0 else 0
+    return {"sla_compliance_percent": compliance}
+
+
+@app.get("/analytics/agent-leaderboard")
+def agent_leaderboard(limit: int = 10):
+    """Return top agents by metric value from agent_metrics."""
+    sql = (
+        "SELECT metric_name, metric_value FROM agent_metrics "
+        "WHERE metric_name LIKE 'agent_%' ORDER BY metric_value DESC LIMIT %s"
+    )
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (limit,))
+            rows = cur.fetchall()
+    leaderboard = [dict(row) for row in rows]
+    return {"leaderboard": leaderboard}
+
+
+@app.get("/analytics/document-usage")
+def document_usage():
+    """Return document retrieval counts from retrieval history."""
+    sql = (
+        "SELECT d.document_id, d.title, COUNT(r.retrieval_id) AS count "
+        "FROM retrieval_history r "
+        "JOIN kb_chunks k ON r.chunk_id = k.chunk_id "
+        "JOIN documents d ON k.document_id = d.document_id "
+        "GROUP BY d.document_id, d.title ORDER BY count DESC"
+    )
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+    usage = [dict(row) for row in rows]
+    return {"document_usage": usage}
+
+
+def _to_csv(data):
+    output = StringIO()
+    if isinstance(data, list):
+        if not data:
+            return output
+        writer = csv.DictWriter(output, fieldnames=data[0].keys())
+        writer.writeheader()
+        writer.writerows(data)
+    else:
+        writer = csv.writer(output)
+        for k, v in data.items():
+            writer.writerow([k, v])
+    output.seek(0)
+    return output
+
+
+@app.get("/analytics/export")
+def export_analytics(type: str = Query(...), format: str = Query("json")):
+    """Export analytics data as JSON or CSV."""
+    mapping = {
+        "ticket_volume": ticket_volume,
+        "resolution_times": resolution_times,
+        "sla_compliance": sla_compliance,
+        "agent_leaderboard": agent_leaderboard,
+        "document_usage": document_usage,
+    }
+    if type not in mapping:
+        raise HTTPException(status_code=400, detail="invalid analytics type")
+    data = mapping[type]()
+    if format == "csv":
+        csv_data = _to_csv(data.get(next(iter(data)))) if isinstance(data, dict) else _to_csv(data)
+        return StreamingResponse(csv_data, media_type="text/csv")
+    return data
 
 
 # --- LLMChain-powered endpoints ---
