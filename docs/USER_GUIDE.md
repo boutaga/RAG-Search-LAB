@@ -103,11 +103,18 @@ POST http://localhost:8000/feedback
 - `AI_AGENT_DB_URL` - PostgreSQL connection string for the AI agent database
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` - Email integration
 - `SLACK_WEBHOOK_URL` - Slack alerting integration
+---
+## 9. Monitoring and Logs
+
+- The installer sets up a Prometheus metrics exporter running as the
+  `raglab-metrics` service. Metrics are available at
+  `http://<server>:<METRICS_EXPORTER_PORT>/`.
+- Log files are stored in `${LOG_PATH}` and rotated daily by the
+  `raglab-logrotate` service and timer. The number of archives kept is
+  controlled by `LOG_RETENTION_DAYS` in `config.env`.
 
 ---
-
-## 9. Troubleshooting
-
+## 10. Troubleshooting
 - Ensure all databases are running and accessible.
 - Check environment variables for correct configuration.
 - Use the `/usage/example` endpoint for more API usage examples.
@@ -115,7 +122,7 @@ POST http://localhost:8000/feedback
 
 ---
 
-## 10. Further Reading
+## 11. Further Reading
 
 - See `custom-agent-tools-py/README.md` for MCP server details and advanced features.
 - See the main `README.md` for architecture, release notes, and project overview.

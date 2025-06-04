@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily RAG-Search-LAB log rotation
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=raglab-logrotate.service
+
+[Install]
+WantedBy=timers.target
