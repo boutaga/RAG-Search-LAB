@@ -69,6 +69,18 @@ export default function App() {
   const [activeCitations, setActiveCitations] = useState<Citation[] | null>(
     null,
   );
+  const [metadata, setMetadata] = useState<Record<string, string[]>>({});
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+
+  // load filter metadata on mount
+  useEffect(() => {
+    fetch(`${API_URL}/metadata`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setMetadata(data))
+      .catch(() => {
+        /* ignore */
+      });
+  }, []);
 
   /** auto‑scroll chat */
   useEffect(() => {
@@ -91,7 +103,7 @@ export default function App() {
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
-      for await (const token of streamChat({ query: input })) {
+      for await (const token of streamChat({ query: input, filters })) {
         assistantMsg = {
           ...assistantMsg,
           content: assistantMsg.content + token,
@@ -143,16 +155,38 @@ export default function App() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
-        {/* TODO: expose filters from /metadata endpoint */}
         <div className="space-y-3">
           <h2 className="text-sm font-medium text-muted-foreground">Filters</h2>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="border-muted" /> Recent only
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="border-muted" /> SOPs
-          </label>
-          {/* ...more filters */}
+          {Object.entries(metadata).map(([group, values]) => (
+            <div key={group} className="space-y-1">
+              <p className="text-xs capitalize text-muted-foreground">{group}</p>
+              {values.map((val) => (
+                <label key={val} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="border-muted"
+                    checked={filters[group]?.includes(val) || false}
+                    onChange={(e) => {
+                      setFilters((prev) => {
+                        const current = prev[group] || [];
+                        if (e.target.checked) {
+                          return {
+                            ...prev,
+                            [group]: [...current, val],
+                          };
+                        }
+                        return {
+                          ...prev,
+                          [group]: current.filter((v) => v !== val),
+                        };
+                      });
+                    }}
+                  />
+                  {val}
+                </label>
+              ))}
+            </div>
+          ))}
         </div>
       </aside>
 

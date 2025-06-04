@@ -89,6 +89,14 @@ POST http://localhost:8000/feedback
 }
 ```
 
+### Get Filter Metadata
+The frontend uses the `/metadata` endpoint to populate search filters.
+
+```bash
+curl http://localhost:8000/metadata
+```
+This returns JSON lists of available categories, ticket fields, and document types.
+
 ---
 
 ## 7. Authentication/Authorization
