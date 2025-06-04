@@ -88,14 +88,23 @@ journalctl -u raglab-mcp -f
 
 ---
 
-## 5. Customization
+## 5. Monitoring and Logs
+
+- A Prometheus metrics exporter is installed as the `raglab-metrics` service.
+  Metrics are served on `http://<server>:<METRICS_EXPORTER_PORT>/`.
+- Log files under `${LOG_PATH}` are rotated daily by the `raglab-logrotate`
+  service and timer. The number of rotations kept is controlled by
+  `LOG_RETENTION_DAYS` in `config.env`.
+
+---
+## 6. Customization
 
 - All ports, paths, and credentials are set in `installation/config.env`.
 - To change service names, update the config and re-run the installer.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 - Ensure you run the installer as root (with `sudo`).
 - Check the output for any errors during installation.
@@ -104,7 +113,7 @@ journalctl -u raglab-mcp -f
 
 ---
 
-## 7. Uninstallation
+## 8. Uninstallation
 
 To remove services:
 ```sh
@@ -121,7 +130,7 @@ rm -rf /opt/raglab
 
 ---
 
-## 8. Frontend UI Setup
+## 9. Frontend UI Setup
 
 A full-featured React + Tailwind frontend is now included in `frontend/`. It provides a split-pane chat UI, streaming answers, and citation viewing.
 
@@ -142,7 +151,7 @@ npm run dev
 
 ---
 
-## 9. Next Steps
+## 10. Next Steps
 
 - The backend API will be available at `http://<server>:<FASTAPI_PORT>/`
 - The MCP server will be available at `http://<server>:<MCP_PORT>/`
@@ -151,6 +160,6 @@ npm run dev
 
 ---
 
-## 10. Support
+## 11. Support
 
 For more details, see the main `README.md` or open an issue in the repository.
