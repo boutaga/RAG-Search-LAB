@@ -228,6 +228,44 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_agent_db)):
     tickets = result.fetchall()
     return templates.TemplateResponse("dashboard.html", {"request": request, "tickets": tickets})
 
+# Endpoint to expose metadata for UI filters
+@app.get("/metadata")
+async def get_metadata(
+    document_db: AsyncSession = Depends(get_document_db),
+    sd_db: AsyncSession = Depends(get_sd_db),
+):
+    """Return lists of values that can be used to build filter controls."""
+    cat_rows = await document_db.execute(text("SELECT name FROM categories ORDER BY name"))
+    categories = [r.name for r in cat_rows.fetchall()]
+
+    status_rows = await sd_db.execute(text("SELECT name FROM ticket_status ORDER BY name"))
+    ticket_statuses = [r.name for r in status_rows.fetchall()]
+
+    prio_rows = await sd_db.execute(text("SELECT name FROM ticket_priority ORDER BY name"))
+    ticket_priorities = [r.name for r in prio_rows.fetchall()]
+
+    type_rows = await sd_db.execute(text("SELECT name FROM ticket_type ORDER BY name"))
+    ticket_types = [r.name for r in type_rows.fetchall()]
+
+    fmt_rows = await document_db.execute(
+        text("SELECT unnest(enum_range(NULL::doc_format)) AS fmt")
+    )
+    doc_formats = [r.fmt for r in fmt_rows.fetchall()]
+
+    sop_rows = await document_db.execute(
+        text("SELECT unnest(enum_range(NULL::sop_status)) AS s")
+    )
+    sop_statuses = [r.s for r in sop_rows.fetchall()]
+
+    return {
+        "categories": categories,
+        "ticket_statuses": ticket_statuses,
+        "ticket_priorities": ticket_priorities,
+        "ticket_types": ticket_types,
+        "doc_formats": doc_formats,
+        "sop_statuses": sop_statuses,
+    }
+
 # New endpoint: List open tickets from SD database
 @app.get("/api/sd/open-tickets")
 async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):

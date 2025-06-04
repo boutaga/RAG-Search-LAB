@@ -229,6 +229,10 @@ This guide provides an overview and usage examples for the main API endpoints ex
 ```bash
 curl -X POST 'http://localhost:8000/ticket' -d 'id=123&title=Example Ticket'
 curl 'http://localhost:8000/search?query=error'
+curl -X POST 'http://localhost:8000/llm/triage_ticket' -d 'ticket_id=123'
+curl -X POST 'http://localhost:8000/llm/root_cause' -d 'ticket_id=123'
+curl -X POST 'http://localhost:8000/llm/summarize_ticket' -d 'ticket_id=123'
+curl -X POST 'http://localhost:8000/llm/followup_actions' -d 'ticket_id=123'
 ```
 
 ### Python

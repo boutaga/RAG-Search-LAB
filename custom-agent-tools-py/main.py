@@ -24,6 +24,8 @@ import requests
 import csv
 from fastapi.responses import StreamingResponse
 from io import StringIO
+import json
+
 
 app = FastAPI(
     title="SD-MCP Python Agent",
@@ -37,6 +39,10 @@ PGVECTOR_CONN_STR = os.getenv(
     "PGVECTOR_CONN_STR",
     "postgresql+psycopg2://user:pass@localhost/agentdb",
 )
+
+# Alerting integration
+TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL")
+PAGERDUTY_ROUTING_KEY = os.getenv("PAGERDUTY_ROUTING_KEY")
 
 def get_pg_conn():
     return psycopg2.connect(PG_CONN_STR, cursor_factory=RealDictCursor)
@@ -59,6 +65,27 @@ def store_feedback(query, dense_results, sparse_results, reranked, user_feedback
             cur.execute(
                 "INSERT INTO feedback (feedback_id, log_id, rating, comments, created_at) VALUES (%s, %s, %s, %s, %s)",
                 (str(uuid.uuid4()), query, user_feedback.get("rating", 0), user_feedback.get("comments", ""), datetime.utcnow())
+            )
+            conn.commit()
+
+# Store outputs from LLM chains for analytics
+def store_chain_output(chain_type: str, input_data: dict, output_text: str):
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS llm_chain_runs (
+                    run_id UUID PRIMARY KEY,
+                    chain_type TEXT NOT NULL,
+                    input_data JSONB NOT NULL,
+                    output_text TEXT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+                """
+            )
+            cur.execute(
+                "INSERT INTO llm_chain_runs (run_id, chain_type, input_data, output_text, created_at) VALUES (%s, %s, %s, %s, %s)",
+                (str(uuid.uuid4()), chain_type, json.dumps(input_data), output_text, datetime.utcnow())
             )
             conn.commit()
 
@@ -107,6 +134,34 @@ def feedback_loop(llm_output, user_feedback):
     # Store feedback and optionally adjust system parameters
     print(f"Feedback received: {user_feedback} for output: {llm_output}")
 
+# Microsoft Teams integration
+def post_to_teams(message: str):
+    if not TEAMS_WEBHOOK_URL:
+        raise HTTPException(status_code=500, detail="TEAMS_WEBHOOK_URL not configured")
+    resp = requests.post(TEAMS_WEBHOOK_URL, json={"text": message})
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail="Teams notification failed")
+    return {"status": "sent"}
+
+
+# PagerDuty integration
+def trigger_pagerduty(summary: str, severity: str = "info", source: str = "custom-agent-tools-py"):
+    if not PAGERDUTY_ROUTING_KEY:
+        raise HTTPException(status_code=500, detail="PAGERDUTY_ROUTING_KEY not configured")
+    payload = {
+        "routing_key": PAGERDUTY_ROUTING_KEY,
+        "event_action": "trigger",
+        "payload": {
+            "summary": summary,
+            "source": source,
+            "severity": severity,
+        },
+    }
+    resp = requests.post("https://events.pagerduty.com/v2/enqueue", json=payload)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail="PagerDuty notification failed")
+    return {"status": "triggered"}
+
 # Hybrid RAG search endpoint with advanced features
 @app.get("/search")
 def search(
@@ -150,6 +205,7 @@ def feedback_loop_endpoint(query: str, llm_output: str, rating: int, comments: O
     feedback_loop(llm_output, user_feedback)
     store_feedback(query, [], [], [], user_feedback, llm_output)
     return {"status": "feedback received"}
+
 
 """Analytics Endpoints"""
 
@@ -270,6 +326,95 @@ def export_analytics(type: str = Query(...), format: str = Query("json")):
         return StreamingResponse(csv_data, media_type="text/csv")
     return data
 
+
+# --- LLMChain-powered endpoints ---
+
+def _get_ticket_summary(ticket_id: int) -> str:
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT ticket_summary FROM external_tickets WHERE ticket_id = %s",
+                (ticket_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            return row["ticket_summary"]
+
+
+@app.post("/llm/triage_ticket")
+def triage_ticket(ticket_id: int):
+    """Classify ticket priority using an LLM chain"""
+    ticket = _get_ticket_summary(ticket_id)
+    prompt = PromptTemplate.from_template(
+        "You are a helpdesk triage assistant. Given the ticket description below, assign a priority label (low, medium, high).\n{ticket}"
+    )
+    chain = LLMChain(llm=OpenAI(temperature=0.2), prompt=prompt)
+    result = chain.run(ticket=ticket)
+    store_chain_output("triage_ticket", {"ticket_id": ticket_id}, result)
+    return {"ticket_id": ticket_id, "triage": result}
+
+
+@app.post("/llm/root_cause")
+def root_cause(ticket_id: int):
+    """Return a likely root cause for the ticket"""
+    ticket = _get_ticket_summary(ticket_id)
+    prompt = PromptTemplate.from_template(
+        "Analyze the following ticket and provide the most likely root cause in one sentence:\n{ticket}"
+    )
+    chain = LLMChain(llm=OpenAI(temperature=0.2), prompt=prompt)
+    result = chain.run(ticket=ticket)
+    store_chain_output("root_cause", {"ticket_id": ticket_id}, result)
+    return {"ticket_id": ticket_id, "root_cause": result}
+
+
+@app.post("/llm/summarize_ticket")
+def summarize_ticket(ticket_id: int):
+    """Summarize the ticket into a short paragraph"""
+    ticket = _get_ticket_summary(ticket_id)
+    prompt = PromptTemplate.from_template(
+        "Provide a concise summary of the following ticket:\n{ticket}"
+    )
+    chain = LLMChain(llm=OpenAI(temperature=0.2), prompt=prompt)
+    result = chain.run(ticket=ticket)
+    store_chain_output("summarize_ticket", {"ticket_id": ticket_id}, result)
+    return {"ticket_id": ticket_id, "summary": result}
+
+
+@app.post("/llm/followup_actions")
+def followup_actions(ticket_id: int):
+    """Suggest follow-up actions for the ticket"""
+    ticket = _get_ticket_summary(ticket_id)
+    prompt = PromptTemplate.from_template(
+        "Based on this ticket, suggest next best follow-up actions in bullet form:\n{ticket}"
+    )
+    chain = LLMChain(llm=OpenAI(temperature=0.2), prompt=prompt)
+    result = chain.run(ticket=ticket)
+    store_chain_output("followup_actions", {"ticket_id": ticket_id}, result)
+    return {"ticket_id": ticket_id, "actions": result}
+
+
+class TeamsPayload(BaseModel):
+    message: str
+
+
+@app.post("/notify/teams")
+def notify_teams(payload: TeamsPayload):
+    return post_to_teams(payload.message)
+
+
+class PagerDutyPayload(BaseModel):
+    summary: str
+    severity: Optional[str] = "info"
+    source: Optional[str] = "custom-agent-tools-py"
+
+
+@app.post("/notify/pagerduty")
+def notify_pagerduty(payload: PagerDutyPayload):
+    return trigger_pagerduty(payload.summary, payload.severity, payload.source)
+
+
 # All previous endpoints (chatlog, ticket, feedback, problem-link, analytics, LLM chains, email/alerting, etc.) remain unchanged
 
 # TODO: Add more advanced analytics, BI tool integration, and UI usage examples as needed
+
