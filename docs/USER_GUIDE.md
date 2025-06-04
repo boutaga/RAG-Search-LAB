@@ -103,6 +103,8 @@ POST http://localhost:8000/feedback
 - `AI_AGENT_DB_URL` - PostgreSQL connection string for the AI agent database
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` - Email integration
 - `SLACK_WEBHOOK_URL` - Slack alerting integration
+- `TEAMS_WEBHOOK_URL` - Microsoft Teams incoming webhook
+- `PAGERDUTY_ROUTING_KEY` - PagerDuty Events API routing key
 
 ---
 
