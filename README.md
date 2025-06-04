@@ -4,6 +4,22 @@ This repository has educational purpose on advanced RAG Search techniques based 
 
 ---
 
+## Solution Features
+
+RAG-Search-LAB demonstrates how to combine a traditional service desk workflow
+with modern Retrieval Augmented Generation (RAG).  Key capabilities include:
+
+- **Hybrid retrieval** using pgvector and SQL for dense and sparse search.
+- **Ticket and document management** stored in PostgreSQL databases.
+- **FastAPI backend** orchestrating RAG queries and business logic.
+- **MCP server** exposing modular tools for chat logging, ticket updates,
+  analytics, and advanced LLM chains.
+- **React/Tailwind frontend** with streaming chat and citation viewing.
+- **Email/Slack alerting**, analytics endpoints and authentication hooks to
+  support production use cases.
+
+---
+
 ## Architecture Overview
 
 ```

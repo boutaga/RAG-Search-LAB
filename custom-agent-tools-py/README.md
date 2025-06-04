@@ -4,7 +4,7 @@ Python/Langchain MCP Server for SD Agent
 
 **This is the actively maintained MCP server for the Service Desk AI Agent. The previous TypeScript version (`custom-agent-tools`) is now deprecated.**
 
-This project is a Python-based MCP server for the Service Desk AI Agent, providing modular tools and resources for chat logging, ticket management, search, feedback, problem linking, advanced LLM orchestration, email, alerting, analytics, advanced LLM chains, and now hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops.
+This project exposes a set of Model Context Protocol (MCP) endpoints that the backend and LLM can call to perform service desk operations.  It provides modular tools and resources for chat logging, ticket management, hybrid search, feedback capture, problem linking and advanced LLM workflows.  Recent versions add analytics, email/Slack alerting, multi-step chains and hybrid reranking for better retrieval quality.
 
 ## Features
 
