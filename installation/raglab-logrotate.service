@@ -1,0 +1,12 @@
+[Unit]
+Description=RAG-Search-LAB Log Rotation
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=${INSTALL_BASE}/installation/config.env
+ExecStart=${INSTALL_BASE}/installation/raglab-logrotate.sh
+
+[Install]
+WantedBy=multi-user.target
