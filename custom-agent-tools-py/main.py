@@ -5,19 +5,9 @@ Python/Langchain MCP Server for SD Agent
 Adds hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Request
 
-try:  # Optional FastMCP support
-    from fastmcp import FastMCP, tool
-except Exception:  # pragma: no cover - fastmcp not installed
-    FastMCP = FastAPI  # type: ignore
-
-    def tool(*_args, **_kwargs):
-        def decorator(fn):
-            return fn
-
-        return decorator
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Depends, Query
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime
@@ -183,6 +173,17 @@ def search(
     max_tokens: int = 2048,
     user: Optional[str] = None
 ):
+    """Run a hybrid RAG search and return the generated answer.
+
+    **Parameters**
+    - `query`: user search text
+    - `limit`: number of documents to retrieve
+    - `rerank`: whether to apply hybrid reranking
+    - `max_tokens`: maximum context window
+    - `user`: optional user identifier
+
+    **Returns** the answer string with the context chunks used.
+    """
     dense_docs = dense_retriever.get_relevant_documents(query)
     with get_pg_conn() as conn:
         with conn.cursor() as cur:
@@ -214,6 +215,7 @@ def search(
 @tool
 @app.post("/feedback-loop")
 def feedback_loop_endpoint(query: str, llm_output: str, rating: int, comments: Optional[str] = None):
+    """Record user feedback for an LLM answer."""
     user_feedback = {"rating": rating, "comments": comments or ""}
     feedback_loop(llm_output, user_feedback)
     store_feedback(query, [], [], [], user_feedback, llm_output)
@@ -408,24 +410,30 @@ def followup_actions(ticket_id: int):
 
 
 class TeamsPayload(BaseModel):
-    message: str
+    message: str = Field(..., description="Notification text", example="Server CPU high")
 
 
 @tool
 @app.post("/notify/teams")
 def notify_teams(payload: TeamsPayload):
+    """Send a Microsoft Teams message."""
     return post_to_teams(payload.message)
 
 
 class PagerDutyPayload(BaseModel):
-    summary: str
-    severity: Optional[str] = "info"
-    source: Optional[str] = "custom-agent-tools-py"
+    summary: str = Field(..., description="Incident summary", example="DB down")
+    severity: Optional[str] = Field(
+        "info", description="PagerDuty severity level", example="critical"
+    )
+    source: Optional[str] = Field(
+        "custom-agent-tools-py", description="Event source", example="sd-agent"
+    )
 
 
 @tool
 @app.post("/notify/pagerduty")
 def notify_pagerduty(payload: PagerDutyPayload):
+    """Trigger a PagerDuty incident."""
     return trigger_pagerduty(payload.summary, payload.severity, payload.source)
 
 

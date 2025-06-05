@@ -266,7 +266,7 @@ print(response.json())
 
 ### Postman
 
-- Import the OpenAPI schema from the FastAPI backend to generate all endpoints.
+- Import the OpenAPI schema from the FastAPI backend to generate all endpoints. The schemas now include concise descriptions and example values.
 - Example: POST to `/feedback` with JSON body.
 
 ---

@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import pathlib
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from langchain.embeddings import OpenAIEmbeddings
@@ -132,6 +132,14 @@ async def create_temporary_solution(
     req: TemporarySolutionCreateRequest,
     agent_db: AsyncSession = Depends(get_agent_db)
 ):
+    """Create a provisional solution and notify consultants.
+
+    **Parameters**
+    - `req`: details of the proposed solution
+    - `agent_db`: database session
+
+    **Returns** the new solution ID and pending status.
+    """
     insert_sql = text("""
         INSERT INTO solutions (problem_id, title, description, is_validated, created_at)
         VALUES (:problem_id, :title, :description, FALSE, now())
@@ -186,39 +194,53 @@ async def startup():
 
 # Pydantic models
 class ChatStreamRequest(BaseModel):
-    query: str
-    filters: Optional[Dict[str, List[str]]] = None
+    query: str = Field(..., description="User question or search query", example="How to reset a password?")
+    filters: Optional[Dict[str, List[str]]] = Field(
+        None,
+        description="Optional facet filters to narrow search",
+        example={"category": ["network"]},
+    )
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., description="Chat message from the user", example="Hello agent")
 
 class TicketUpdate(BaseModel):
-    ticket_id: int
-    status_id: Optional[int] = None
-    assignee_user_id: Optional[int] = None
-    notes: Optional[str] = None
+    ticket_id: int = Field(..., description="Internal ticket identifier", example=123)
+    status_id: Optional[int] = Field(None, description="New status ID", example=2)
+    assignee_user_id: Optional[int] = Field(None, description="User ID of new assignee", example=5)
+    notes: Optional[str] = Field(None, description="Optional comment or update", example="Escalated to tier 2")
 
 class FeedbackRequest(BaseModel):
-    log_id: int
-    rating: int
-    comments: Optional[str] = None
+    log_id: int = Field(..., description="Chat log identifier", example=42)
+    rating: int = Field(..., description="Rating from 1-5", example=5)
+    comments: Optional[str] = Field(None, description="Additional feedback text", example="Great answer")
 
 class ProblemLink(BaseModel):
-    ticket_id: int
-    problem_id: int
-    link_type: str = "related"
+    ticket_id: int = Field(..., description="Ticket ID to link", example=1001)
+    problem_id: int = Field(..., description="Known problem ID", example=55)
+    link_type: str = Field("related", description="Relationship type", example="root_cause")
 
 class TemporarySolutionCreateRequest(BaseModel):
-    problem_id: int
-    title: str
-    description: str
-    proposed_by_user_id: Optional[int] = None  # ID of the user proposing the solution
+    problem_id: int = Field(..., description="Problem ID being addressed", example=55)
+    title: str = Field(..., description="Short title for the solution", example="Restart service")
+    description: str = Field(..., description="Detailed description", example="Run systemctl restart svc")
+    proposed_by_user_id: Optional[int] = Field(
+        None,
+        description="ID of the user proposing the solution",
+        example=12,
+    )
 
 class SolutionValidationRequest(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    is_validated: Optional[bool] = None
-    validator_user_id: Optional[int] = None  # ID of the consultant validating the solution
+    solution_id: int = Field(..., description="Solution identifier", example=77)
+    title: Optional[str] = Field(None, description="Updated title", example="Apply patch")
+    description: Optional[str] = Field(None, description="Updated description", example="Use latest package")
+    is_validated: Optional[bool] = Field(None, description="Mark as validated")
+    validator_user_id: Optional[int] = Field(
+        None,
+        description="Consultant user ID performing validation",
+        example=9,
+    )
+
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
@@ -281,6 +303,7 @@ async def get_metadata(
 # New endpoint: List open tickets from SD database
 @tickets_router.get("/api/sd/open-tickets")
 async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):
+    """Return a list of currently open tickets ordered by priority."""
     ticket_sql = text("""
         SELECT t.ticket_id, t.title, ts.name AS status, tp.name AS priority, 
                tt.name AS type, t.description 
@@ -308,6 +331,7 @@ async def get_related_solutions(
     ticket_id: int,
     agent_db: AsyncSession = Depends(get_agent_db)
 ):
+    """Fetch validated solutions linked to the given ticket."""
     # Find the external_ticket_id in AI agent database
     ext_ticket_sql = text("""
         SELECT ticket_id FROM external_tickets WHERE external_id = :ext_id AND system_source = 'internal_sd'
@@ -346,13 +370,40 @@ async def get_related_solutions(
 
     return {"related_solutions": solutions}
 
-# Validate and update a solution
-@solutions_router.put("/solutions/{solution_id}")
+
+# New endpoint: Create a temporary solution linked to a problem
+@app.post("/api/solutions/temporary")
+async def create_temporary_solution(
+    req: TemporarySolutionCreateRequest,
+    agent_db: AsyncSession = Depends(get_agent_db)
+):
+    """Create a temporary solution pending consultant validation."""
+    insert_sql = text("""
+        INSERT INTO solutions (problem_id, title, description, is_validated, created_at)
+        VALUES (:problem_id, :title, :description, FALSE, now())
+        RETURNING solution_id
+    """)
+    result = await agent_db.execute(insert_sql.bindparams(
+        problem_id=req.problem_id,
+        title=req.title,
+        description=req.description
+    ))
+    solution_id = result.scalar_one()
+
+    # Optionally, you could log who proposed the solution if you have a user system
+
+    await agent_db.commit()
+    return {"solution_id": solution_id, "status": "pending_validation"}
+
+# New endpoint: Validate and update a solution
+@app.put("/api/solutions/validate")
+
 async def validate_solution(
     solution_id: int,
     req: SolutionValidationRequest,
     agent_db: AsyncSession = Depends(get_agent_db)
 ):
+    """Update a solution's details or mark it validated."""
     # Build update fields dynamically
     update_fields = []
     params = {"solution_id": solution_id}
