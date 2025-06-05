@@ -23,6 +23,20 @@ This guide provides an overview and usage examples for the main API endpoints ex
   GET /ticket
   ```
 
+### Solutions
+
+- **Create Solution Proposal**
+  ```
+  POST /solutions
+  Body: problem_id, title, description, proposed_by_user_id (optional)
+  ```
+
+- **Validate/Update Solution**
+  ```
+  PUT /solutions/{solution_id}
+  Body: title, description, is_validated, validator_user_id (all optional)
+  ```
+
 ### Chat Logging
 
 - **Add Chat Log**
@@ -118,6 +132,13 @@ This guide provides an overview and usage examples for the main API endpoints ex
   POST /feedback-loop
   Body: query, llm_output, rating, comments (optional)
   ```
+
+### MCP Tool Selection
+
+The backend chooses which MCP tools to invoke based on the request type.
+For example, when a new solution is created the `solution_created` type
+triggers the `send_email` tool on the `email_server`. Additional types may
+combine multiple tools such as Teams and PagerDuty alerts.
 
 ### Email/Alerting
 

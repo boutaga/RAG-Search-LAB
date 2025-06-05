@@ -2,7 +2,7 @@
 
 import os
 import uuid
-from fastapi import FastAPI, Depends, HTTPException, Request, Form
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -54,6 +54,11 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Routers
+solutions_router = APIRouter()
+tickets_router = APIRouter()
+chat_router = APIRouter()
+
 # Serve frontend build (React) from /
 FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 if FRONTEND_DIST.exists():
@@ -94,6 +99,17 @@ async def get_sd_db():
 mcp_client = MultiServerMCPClient([MCP_SERVERS])
 tools = None
 
+def get_mcp_tools_for_request(request_type: str) -> List[Tuple[str, str]]:
+    """Return a list of (server, tool) pairs for the given request type."""
+    mapping = {
+        "solution_created": [("email_server", "send_email")],
+        "ticket_alert": [
+            ("teams_server", "notify_teams"),
+            ("pagerduty_server", "trigger_pagerduty"),
+        ],
+    }
+    return mapping.get(request_type, [])
+
 def adjust_weights(query: str) -> Tuple[float, float]:
     """Dynamically adjust weights between sparse and dense vectors based on query type"""
     # Simple heuristics for weight adjustment
@@ -110,8 +126,8 @@ def adjust_weights(query: str) -> Tuple[float, float]:
     # Default weights for balanced queries
     return DENSE_WEIGHT, SPARSE_WEIGHT
 
-# Modify the create_temporary_solution endpoint to send notification via MCP client
-@app.post("/api/solutions/temporary")
+# Create a solution proposal and notify consultants via MCP
+@solutions_router.post("/solutions")
 async def create_temporary_solution(
     req: TemporarySolutionCreateRequest,
     agent_db: AsyncSession = Depends(get_agent_db)
@@ -138,23 +154,20 @@ async def create_temporary_solution(
 
     await agent_db.commit()
 
-    # Send email notification to consultant(s) via MCP client
+    # Notify consultant(s) via predefined MCP tools
     consultant_email = os.getenv("CONSULTANT_EMAIL", "consultant@example.com")
     subject = f"New Solution Pending Approval: {req.title}"
-    body = f"A new solution has been proposed for problem ID {req.problem_id}.\n\nTitle: {req.title}\nDescription: {req.description}\n\nPlease review and validate the solution."
+    body = (
+        f"A new solution has been proposed for problem ID {req.problem_id}.\n\n"
+        f"Title: {req.title}\nDescription: {req.description}\n\nPlease review and validate the solution."
+    )
 
-    try:
-        await mcp_client.call_tool(
-            "email_server",  # Assuming the MCP server name is 'email_server'
-            "send_email",    # Assuming the tool name is 'send_email'
-            {
-                "to": consultant_email,
-                "subject": subject,
-                "body": body
-            }
-        )
-    except Exception as e:
-        print(f"Failed to send email via MCP client: {e}")
+    params = {"to": consultant_email, "subject": subject, "body": body}
+    for server, tool in get_mcp_tools_for_request("solution_created"):
+        try:
+            await mcp_client.call_tool(server, tool, params)
+        except Exception as e:
+            print(f"Failed to call {tool} on {server}: {e}")
 
     return {"solution_id": solution_id, "status": "pending_validation"}
 
@@ -228,6 +241,7 @@ class SolutionValidationRequest(BaseModel):
         example=9,
     )
 
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -287,7 +301,7 @@ async def get_metadata(
     }
 
 # New endpoint: List open tickets from SD database
-@app.get("/api/sd/open-tickets")
+@tickets_router.get("/api/sd/open-tickets")
 async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):
     """Return a list of currently open tickets ordered by priority."""
     ticket_sql = text("""
@@ -312,7 +326,7 @@ async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):
     return {"open_tickets": [dict(t) for t in tickets]}
 
 # New endpoint: Get similar problems and solutions for a given ticket
-@app.get("/api/tickets/{ticket_id}/related-solutions")
+@tickets_router.get("/api/tickets/{ticket_id}/related-solutions")
 async def get_related_solutions(
     ticket_id: int,
     agent_db: AsyncSession = Depends(get_agent_db)
@@ -356,6 +370,7 @@ async def get_related_solutions(
 
     return {"related_solutions": solutions}
 
+
 # New endpoint: Create a temporary solution linked to a problem
 @app.post("/api/solutions/temporary")
 async def create_temporary_solution(
@@ -382,14 +397,16 @@ async def create_temporary_solution(
 
 # New endpoint: Validate and update a solution
 @app.put("/api/solutions/validate")
+
 async def validate_solution(
+    solution_id: int,
     req: SolutionValidationRequest,
     agent_db: AsyncSession = Depends(get_agent_db)
 ):
     """Update a solution's details or mark it validated."""
     # Build update fields dynamically
     update_fields = []
-    params = {"solution_id": req.solution_id}
+    params = {"solution_id": solution_id}
     if req.title is not None:
         update_fields.append("title = :title")
         params["title"] = req.title
@@ -420,7 +437,7 @@ async def validate_solution(
     await agent_db.commit()
     return {"solution_id": updated_id, "status": "updated"}
 
-@app.post("/chat/stream")
+@chat_router.post("/chat/stream")
 async def chat_stream_endpoint(
     req: ChatStreamRequest,
     agent_db: AsyncSession = Depends(get_agent_db),
@@ -591,7 +608,7 @@ async def chat_stream_endpoint(
 
     return StreamingResponse(token_stream(), media_type="text/event-stream")
 
-@app.get("/chat/citations/{msg_id}")
+@chat_router.get("/chat/citations/{msg_id}")
 async def get_citations(msg_id: str, agent_db: AsyncSession = Depends(get_agent_db)):
     """
     Returns citations (retrieved chunks) for a given message/log_id.
@@ -617,7 +634,7 @@ async def get_citations(msg_id: str, agent_db: AsyncSession = Depends(get_agent_
     ]
     return citations
 
-@app.put("/api/tickets/{ticket_id}")
+@tickets_router.put("/api/tickets/{ticket_id}")
 async def update_ticket(
     ticket_update: TicketUpdate, 
     db: AsyncSession = Depends(get_db)
@@ -664,7 +681,7 @@ async def update_ticket(
     await db.commit()
     return {"ticket_id": updated_id, "status": "updated"}
 
-@app.post("/api/feedback")
+@chat_router.post("/api/feedback")
 async def submit_feedback(
     feedback: FeedbackRequest, 
     db: AsyncSession = Depends(get_db)
@@ -697,7 +714,7 @@ async def submit_feedback(
     await db.commit()
     return {"status": "feedback received", "log_id": feedback.log_id}
 
-@app.post("/api/link-problem")
+@tickets_router.post("/api/link-problem")
 async def link_ticket_to_problem(
     link_data: ProblemLink,
     db: AsyncSession = Depends(get_db)
@@ -761,10 +778,15 @@ async def link_ticket_to_problem(
     
     await db.commit()
     return {
-        "status": "linked", 
-        "ticket_id": link_data.ticket_id, 
+        "status": "linked",
+        "ticket_id": link_data.ticket_id,
         "problem_id": link_data.problem_id
     }
+
+# Register routers with the main app
+app.include_router(solutions_router)
+app.include_router(tickets_router)
+app.include_router(chat_router)
 
 # NGINX config snippet (to be placed in /etc/nginx/sites-available/agent):
 # server {

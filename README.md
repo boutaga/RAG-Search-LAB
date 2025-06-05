@@ -173,6 +173,9 @@ pip install -r requirements.txt  # or see README for manual install
 uvicorn main:app --reload
 ```
 
+After the server starts, its manifest can be retrieved from
+`http://localhost:8000/.well-known/ai-plugin.json` for FastMCP discovery.
+
 ### Integration
 
 Once running, the MCP server exposes tools and resources accessible via the Model Context Protocol, allowing the AI Agent to offload these responsibilities.
