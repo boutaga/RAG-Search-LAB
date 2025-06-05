@@ -119,6 +119,13 @@ This guide provides an overview and usage examples for the main API endpoints ex
   Body: query, llm_output, rating, comments (optional)
   ```
 
+### MCP Tool Selection
+
+The backend chooses which MCP tools to invoke based on the request type.
+For example, when a new solution is created the `solution_created` type
+triggers the `send_email` tool on the `email_server`. Additional types may
+combine multiple tools such as Teams and PagerDuty alerts.
+
 ### Email/Alerting
 
 - **Send Email**

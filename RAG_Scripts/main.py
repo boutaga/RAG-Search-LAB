@@ -94,6 +94,17 @@ async def get_sd_db():
 mcp_client = MultiServerMCPClient([MCP_SERVERS])
 tools = None
 
+def get_mcp_tools_for_request(request_type: str) -> List[Tuple[str, str]]:
+    """Return a list of (server, tool) pairs for the given request type."""
+    mapping = {
+        "solution_created": [("email_server", "send_email")],
+        "ticket_alert": [
+            ("teams_server", "notify_teams"),
+            ("pagerduty_server", "trigger_pagerduty"),
+        ],
+    }
+    return mapping.get(request_type, [])
+
 def adjust_weights(query: str) -> Tuple[float, float]:
     """Dynamically adjust weights between sparse and dense vectors based on query type"""
     # Simple heuristics for weight adjustment
@@ -130,23 +141,20 @@ async def create_temporary_solution(
 
     await agent_db.commit()
 
-    # Send email notification to consultant(s) via MCP client
+    # Notify consultant(s) via predefined MCP tools
     consultant_email = os.getenv("CONSULTANT_EMAIL", "consultant@example.com")
     subject = f"New Solution Pending Approval: {req.title}"
-    body = f"A new solution has been proposed for problem ID {req.problem_id}.\n\nTitle: {req.title}\nDescription: {req.description}\n\nPlease review and validate the solution."
+    body = (
+        f"A new solution has been proposed for problem ID {req.problem_id}.\n\n"
+        f"Title: {req.title}\nDescription: {req.description}\n\nPlease review and validate the solution."
+    )
 
-    try:
-        await mcp_client.call_tool(
-            "email_server",  # Assuming the MCP server name is 'email_server'
-            "send_email",    # Assuming the tool name is 'send_email'
-            {
-                "to": consultant_email,
-                "subject": subject,
-                "body": body
-            }
-        )
-    except Exception as e:
-        print(f"Failed to send email via MCP client: {e}")
+    params = {"to": consultant_email, "subject": subject, "body": body}
+    for server, tool in get_mcp_tools_for_request("solution_created"):
+        try:
+            await mcp_client.call_tool(server, tool, params)
+        except Exception as e:
+            print(f"Failed to call {tool} on {server}: {e}")
 
     return {"solution_id": solution_id, "status": "pending_validation"}
 
