@@ -34,7 +34,7 @@ This guide provides step-by-step instructions for setting up, running, and using
 
 ```bash
 cd RAG_Scripts
-pip install -r requirements.txt  # or install FastAPI, SQLAlchemy, etc.
+pip install -r requirements.txt  # requirements.txt now included
 uvicorn main:app --reload
 ```
 
@@ -49,7 +49,7 @@ uvicorn main:app --reload
 cd custom-agent-tools-py
 python -m venv venv
 venv/Scripts/activate  # On Windows
-pip install -r requirements.txt
+pip install -r requirements.txt  # requirements.txt now included
 uvicorn main:app --reload
 ```
 

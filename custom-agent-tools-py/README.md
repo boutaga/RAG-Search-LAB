@@ -30,7 +30,7 @@ This project exposes a set of Model Context Protocol (MCP) endpoints that the ba
 cd custom-agent-tools-py
 python -m venv venv
 venv/Scripts/activate  # On Windows
-pip install -r requirements.txt  # or see below for manual install
+pip install -r requirements.txt  # requirements.txt now included
 ```
 
 ### Manual install

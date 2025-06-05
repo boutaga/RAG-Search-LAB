@@ -88,7 +88,7 @@ This project consists of several main components:
 **Manual Setup:**
 ```bash
 cd RAG_Scripts
-pip install -r requirements.txt  # or install FastAPI, SQLAlchemy, etc.
+pip install -r requirements.txt  # requirements.txt now included
 uvicorn main:app --reload
 ```
 - Configure database connection strings as needed in the environment or code.
@@ -103,7 +103,7 @@ uvicorn main:app --reload
 cd custom-agent-tools-py
 python -m venv venv
 venv/Scripts/activate  # On Windows
-pip install -r requirements.txt
+pip install -r requirements.txt  # requirements.txt now included
 uvicorn main:app --reload
 ```
 - Set environment variables for database and integrations (see README in the directory).
@@ -169,7 +169,7 @@ The MCP server projects are located in the `custom-agent-tools` (TypeScript) and
 cd custom-agent-tools-py
 python -m venv venv
 venv/Scripts/activate  # On Windows
-pip install -r requirements.txt  # or see README for manual install
+pip install -r requirements.txt  # requirements.txt now included
 uvicorn main:app --reload
 ```
 

@@ -23,6 +23,16 @@ This guide provides an overview and usage examples for the main API endpoints ex
   GET /ticket
   ```
 
+- **List Open Tickets**
+  ```
+  GET /api/sd/open-tickets
+  ```
+
+- **Related Solutions for a Ticket**
+  ```
+  GET /api/tickets/{ticket_id}/related-solutions
+  ```
+
 ### Solutions
 
 - **Create Solution Proposal**
@@ -35,6 +45,18 @@ This guide provides an overview and usage examples for the main API endpoints ex
   ```
   PUT /solutions/{solution_id}
   Body: title, description, is_validated, validator_user_id (all optional)
+  ```
+
+- **Create Temporary Solution**
+  ```
+  POST /api/solutions/temporary
+  Body: problem_id, title, description
+  ```
+
+- **Validate Solution**
+  ```
+  PUT /api/solutions/validate?solution_id=ID
+  Body: title, description, is_validated, validator_user_id (any optional)
   ```
 
 ### Chat Logging
