@@ -23,6 +23,20 @@ This guide provides an overview and usage examples for the main API endpoints ex
   GET /ticket
   ```
 
+### Solutions
+
+- **Create Solution Proposal**
+  ```
+  POST /solutions
+  Body: problem_id, title, description, proposed_by_user_id (optional)
+  ```
+
+- **Validate/Update Solution**
+  ```
+  PUT /solutions/{solution_id}
+  Body: title, description, is_validated, validator_user_id (all optional)
+  ```
+
 ### Chat Logging
 
 - **Add Chat Log**

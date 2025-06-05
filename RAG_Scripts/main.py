@@ -2,7 +2,7 @@
 
 import os
 import uuid
-from fastapi import FastAPI, Depends, HTTPException, Request, Form
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -53,6 +53,11 @@ AsyncSDSessionLocal = sessionmaker(sd_engine, class_=AsyncSession, expire_on_com
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Routers
+solutions_router = APIRouter()
+tickets_router = APIRouter()
+chat_router = APIRouter()
 
 # Serve frontend build (React) from /
 FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
@@ -110,8 +115,8 @@ def adjust_weights(query: str) -> Tuple[float, float]:
     # Default weights for balanced queries
     return DENSE_WEIGHT, SPARSE_WEIGHT
 
-# Modify the create_temporary_solution endpoint to send notification via MCP client
-@app.post("/api/solutions/temporary")
+# Create a solution proposal and notify consultants via MCP
+@solutions_router.post("/solutions")
 async def create_temporary_solution(
     req: TemporarySolutionCreateRequest,
     agent_db: AsyncSession = Depends(get_agent_db)
@@ -202,7 +207,6 @@ class TemporarySolutionCreateRequest(BaseModel):
     proposed_by_user_id: Optional[int] = None  # ID of the user proposing the solution
 
 class SolutionValidationRequest(BaseModel):
-    solution_id: int
     title: Optional[str] = None
     description: Optional[str] = None
     is_validated: Optional[bool] = None
@@ -267,7 +271,7 @@ async def get_metadata(
     }
 
 # New endpoint: List open tickets from SD database
-@app.get("/api/sd/open-tickets")
+@tickets_router.get("/api/sd/open-tickets")
 async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):
     ticket_sql = text("""
         SELECT t.ticket_id, t.title, ts.name AS status, tp.name AS priority, 
@@ -291,7 +295,7 @@ async def list_open_tickets(sd_db: AsyncSession = Depends(get_sd_db)):
     return {"open_tickets": [dict(t) for t in tickets]}
 
 # New endpoint: Get similar problems and solutions for a given ticket
-@app.get("/api/tickets/{ticket_id}/related-solutions")
+@tickets_router.get("/api/tickets/{ticket_id}/related-solutions")
 async def get_related_solutions(
     ticket_id: int,
     agent_db: AsyncSession = Depends(get_agent_db)
@@ -334,38 +338,16 @@ async def get_related_solutions(
 
     return {"related_solutions": solutions}
 
-# New endpoint: Create a temporary solution linked to a problem
-@app.post("/api/solutions/temporary")
-async def create_temporary_solution(
-    req: TemporarySolutionCreateRequest,
-    agent_db: AsyncSession = Depends(get_agent_db)
-):
-    insert_sql = text("""
-        INSERT INTO solutions (problem_id, title, description, is_validated, created_at)
-        VALUES (:problem_id, :title, :description, FALSE, now())
-        RETURNING solution_id
-    """)
-    result = await agent_db.execute(insert_sql.bindparams(
-        problem_id=req.problem_id,
-        title=req.title,
-        description=req.description
-    ))
-    solution_id = result.scalar_one()
-
-    # Optionally, you could log who proposed the solution if you have a user system
-
-    await agent_db.commit()
-    return {"solution_id": solution_id, "status": "pending_validation"}
-
-# New endpoint: Validate and update a solution
-@app.put("/api/solutions/validate")
+# Validate and update a solution
+@solutions_router.put("/solutions/{solution_id}")
 async def validate_solution(
+    solution_id: int,
     req: SolutionValidationRequest,
     agent_db: AsyncSession = Depends(get_agent_db)
 ):
     # Build update fields dynamically
     update_fields = []
-    params = {"solution_id": req.solution_id}
+    params = {"solution_id": solution_id}
     if req.title is not None:
         update_fields.append("title = :title")
         params["title"] = req.title
@@ -396,7 +378,7 @@ async def validate_solution(
     await agent_db.commit()
     return {"solution_id": updated_id, "status": "updated"}
 
-@app.post("/chat/stream")
+@chat_router.post("/chat/stream")
 async def chat_stream_endpoint(
     req: ChatStreamRequest,
     agent_db: AsyncSession = Depends(get_agent_db),
@@ -567,7 +549,7 @@ async def chat_stream_endpoint(
 
     return StreamingResponse(token_stream(), media_type="text/event-stream")
 
-@app.get("/chat/citations/{msg_id}")
+@chat_router.get("/chat/citations/{msg_id}")
 async def get_citations(msg_id: str, agent_db: AsyncSession = Depends(get_agent_db)):
     """
     Returns citations (retrieved chunks) for a given message/log_id.
@@ -593,7 +575,7 @@ async def get_citations(msg_id: str, agent_db: AsyncSession = Depends(get_agent_
     ]
     return citations
 
-@app.put("/api/tickets/{ticket_id}")
+@tickets_router.put("/api/tickets/{ticket_id}")
 async def update_ticket(
     ticket_update: TicketUpdate, 
     db: AsyncSession = Depends(get_db)
@@ -640,7 +622,7 @@ async def update_ticket(
     await db.commit()
     return {"ticket_id": updated_id, "status": "updated"}
 
-@app.post("/api/feedback")
+@chat_router.post("/api/feedback")
 async def submit_feedback(
     feedback: FeedbackRequest, 
     db: AsyncSession = Depends(get_db)
@@ -673,7 +655,7 @@ async def submit_feedback(
     await db.commit()
     return {"status": "feedback received", "log_id": feedback.log_id}
 
-@app.post("/api/link-problem")
+@tickets_router.post("/api/link-problem")
 async def link_ticket_to_problem(
     link_data: ProblemLink,
     db: AsyncSession = Depends(get_db)
@@ -737,10 +719,15 @@ async def link_ticket_to_problem(
     
     await db.commit()
     return {
-        "status": "linked", 
-        "ticket_id": link_data.ticket_id, 
+        "status": "linked",
+        "ticket_id": link_data.ticket_id,
         "problem_id": link_data.problem_id
     }
+
+# Register routers with the main app
+app.include_router(solutions_router)
+app.include_router(tickets_router)
+app.include_router(chat_router)
 
 # NGINX config snippet (to be placed in /etc/nginx/sites-available/agent):
 # server {
