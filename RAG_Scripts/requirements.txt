@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+langchain
+langchain-postgres
+torch
+numpy
+jinja2
