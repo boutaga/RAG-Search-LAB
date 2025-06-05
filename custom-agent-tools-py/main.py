@@ -5,7 +5,18 @@ Python/Langchain MCP Server for SD Agent
 Adds hybrid reranking, context window optimization, dynamic prompt engineering, and feedback loops.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
+
+try:  # Optional FastMCP support
+    from fastmcp import FastMCP, tool
+except Exception:  # pragma: no cover - fastmcp not installed
+    FastMCP = FastAPI  # type: ignore
+
+    def tool(*_args, **_kwargs):
+        def decorator(fn):
+            return fn
+
+        return decorator
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
@@ -27,7 +38,7 @@ from io import StringIO
 import json
 
 
-app = FastAPI(
+app = FastMCP(
     title="SD-MCP Python Agent",
     version="0.9",
     description="Python/Langchain MCP server for Service Desk Agent with advanced RAG, LLM, analytics, UI, and feedback loops"
@@ -163,6 +174,7 @@ def trigger_pagerduty(summary: str, severity: str = "info", source: str = "custo
     return {"status": "triggered"}
 
 # Hybrid RAG search endpoint with advanced features
+@tool
 @app.get("/search")
 def search(
     query: str,
@@ -199,6 +211,7 @@ def search(
     }
 
 # Feedback loop endpoint
+@tool
 @app.post("/feedback-loop")
 def feedback_loop_endpoint(query: str, llm_output: str, rating: int, comments: Optional[str] = None):
     user_feedback = {"rating": rating, "comments": comments or ""}
@@ -398,6 +411,7 @@ class TeamsPayload(BaseModel):
     message: str
 
 
+@tool
 @app.post("/notify/teams")
 def notify_teams(payload: TeamsPayload):
     return post_to_teams(payload.message)
@@ -409,9 +423,28 @@ class PagerDutyPayload(BaseModel):
     source: Optional[str] = "custom-agent-tools-py"
 
 
+@tool
 @app.post("/notify/pagerduty")
 def notify_pagerduty(payload: PagerDutyPayload):
     return trigger_pagerduty(payload.summary, payload.severity, payload.source)
+
+
+@app.get("/.well-known/ai-plugin.json", include_in_schema=False)
+def plugin_manifest(request: Request):
+    """Return FastMCP tool metadata."""
+    base = str(request.base_url).rstrip("/")
+    return {
+        "schema_version": "v1",
+        "name_for_human": "SD MCP Tools",
+        "name_for_model": "sd_mcp",
+        "description_for_human": "Service Desk MCP tools for search and notifications",
+        "description_for_model": "Tools for searching the KB and sending notifications.",
+        "auth": {"type": "none"},
+        "api": {"type": "openapi", "url": f"{base}/openapi.json"},
+        "logo_url": f"{base}/static/logo.png",
+        "contact_email": "support@example.com",
+        "legal_info_url": "https://example.com/legal",
+    }
 
 
 # All previous endpoints (chatlog, ticket, feedback, problem-link, analytics, LLM chains, email/alerting, etc.) remain unchanged
