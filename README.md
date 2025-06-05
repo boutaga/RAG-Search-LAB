@@ -132,6 +132,7 @@ UI components: chat, ticket management, analytics dashboards, feedback forms, re
 ### 5. Usage Examples
 
 - Example API calls (curl, Python, Postman) are provided in the documentation and `/usage/example` endpoint of the MCP server.
+- The generated OpenAPI schemas are available under `docs/` for easy client generation.
 - Sample workflows: creating a ticket, searching knowledge, submitting feedback, analytics export.
 
 ### 6. Authentication/Authorization
