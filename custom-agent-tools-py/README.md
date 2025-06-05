@@ -45,6 +45,9 @@ pip install langchain langchain-community fastapi uvicorn pydantic psycopg2-bina
 uvicorn main:app --reload
 ```
 
+After starting the server, the tool manifest is available at
+`http://localhost:8000/.well-known/ai-plugin.json`.
+
 ## Email/Alerting Configuration
 
 Set the following environment variables for email and Slack integration:
