@@ -1,0 +1,332 @@
+name: RAG-as-a-Service CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Code Quality Checks
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [rag-service, mcp-server, frontend]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      if: matrix.service != 'frontend'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Set up Node.js
+      if: matrix.service == 'frontend'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.npm
+          **/node_modules
+        key: ${{ runner.os }}-${{ matrix.service }}-${{ hashFiles('**/requirements.txt', '**/package-lock.json') }}
+    
+    - name: Install Python dependencies
+      if: matrix.service != 'frontend'
+      run: |
+        cd ${{ matrix.service }}
+        pip install -r requirements.txt
+        pip install pytest pytest-cov black flake8 mypy
+    
+    - name: Install Node dependencies
+      if: matrix.service == 'frontend'
+      run: |
+        cd ${{ matrix.service }}
+        npm ci
+    
+    - name: Lint Python code
+      if: matrix.service != 'frontend'
+      run: |
+        cd ${{ matrix.service }}
+        black --check .
+        flake8 .
+        mypy .
+    
+    - name: Lint TypeScript code
+      if: matrix.service == 'frontend'
+      run: |
+        cd ${{ matrix.service }}
+        npm run lint
+        npm run type-check
+    
+    - name: Run tests
+      run: |
+        cd ${{ matrix.service }}
+        if [ "${{ matrix.service }}" == "frontend" ]; then
+          npm test -- --coverage
+        else
+          pytest --cov=. --cov-report=xml
+        fi
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./${{ matrix.service }}/coverage.xml
+        flags: ${{ matrix.service }}
+
+  # Security Scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event.repository.default_branch }}
+
+  # Database Migration Tests
+  test-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install alembic psycopg2-binary sqlalchemy
+    
+    - name: Run migrations
+      env:
+        DATABASE_URL: postgresql://postgres:testpass@localhost:5432/ragaas_test
+      run: |
+        cd rag-service
+        alembic upgrade head
+    
+    - name: Test rollback
+      env:
+        DATABASE_URL: postgresql://postgres:testpass@localhost:5432/ragaas_test
+      run: |
+        cd rag-service
+        alembic downgrade -1
+        alembic upgrade head
+
+  # Build Docker Images
+  build-images:
+    needs: [lint-and-test, security-scan]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [rag-service, mcp-server, frontend]
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./${{ matrix.service }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+  # Integration Tests
+  integration-tests:
+    needs: build-images
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Compose
+      run: |
+        docker compose version
+    
+    - name: Start services
+      run: |
+        docker compose -f docker-compose.test.yml up -d
+        sleep 30  # Wait for services to be ready
+    
+    - name: Run integration tests
+      run: |
+        docker compose -f docker-compose.test.yml exec -T rag-service pytest tests/integration
+    
+    - name: Show logs on failure
+      if: failure()
+      run: docker compose -f docker-compose.test.yml logs
+
+  # Deploy to Staging
+  deploy-staging:
+    needs: integration-tests
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to Kubernetes (Staging)
+      uses: azure/k8s-deploy@v4
+      with:
+        namespace: ragaas-staging
+        manifests: |
+          k8s/staging/
+        images: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-rag-service:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-mcp-server:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}
+
+  # Deploy to Production
+  deploy-production:
+    needs: integration-tests
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to Kubernetes (Production)
+      uses: azure/k8s-deploy@v4
+      with:
+        namespace: ragaas-production
+        manifests: |
+          k8s/production/
+        images: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-rag-service:${{ github.event.release.tag_name }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-mcp-server:${{ github.event.release.tag_name }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.event.release.tag_name }}
+    
+    - name: Create deployment record
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'production',
+            description: 'Production deployment',
+            auto_merge: false,
+            required_contexts: []
+          });
+
+  # Build and Publish Helm Chart
+  publish-helm-chart:
+    needs: integration-tests
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+    
+    - name: Package Helm chart
+      run: |
+        helm package ./helm/ragaas
+    
+    - name: Push to Chart Registry
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+        helm push ragaas-*.tgz oci://${{ env.REGISTRY }}/${{ github.repository }}/charts
+
+  # Documentation Build
+  build-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install mkdocs mkdocs-material mkdocs-mermaid2-plugin
+    
+    - name: Build documentation
+      run: mkdocs build
+    
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./site
